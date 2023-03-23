@@ -98,14 +98,28 @@ class T5RelativePositionBias(nn.Module):
 
 # feedforward
 
+# class FeedForward(nn.Module):
+#     def __init__(self, dim, mult = 4, dropout = 0.):
+#         super().__init__()
+#         self.net = nn.Sequential(
+#             nn.Linear(dim, dim * mult),
+#             nn.GELU(),
+#             nn.Dropout(dropout),
+#             nn.Linear(dim * mult, dim)
+#         )
+
+#     def forward(self, x):
+#         return self.net(x)
+
+# HF models have a fixed size intermediate size:
 class FeedForward(nn.Module):
-    def __init__(self, dim, mult = 4, dropout = 0.):
+    def __init__(self, dim, intermediate_dim, dropout = 0.):
         super().__init__()
         self.net = nn.Sequential(
-            nn.Linear(dim, dim * mult),
+            nn.Linear(dim, intermediate_dim),
             nn.GELU(),
             nn.Dropout(dropout),
-            nn.Linear(dim * mult, dim)
+            nn.Linear(intermediate_dim, dim)
         )
 
     def forward(self, x):
@@ -131,8 +145,8 @@ class Attention(nn.Module):
 
         self.dropout = nn.Dropout(dropout)
 
-        self.to_q = nn.Linear(dim, inner_dim, bias = False)
-        self.to_kv = nn.Linear(dim, dim_head * 2, bias = False)
+        self.to_q = nn.Linear(dim, inner_dim, bias = True)  # bias = True to make compatible with HF models.
+        self.to_kv = nn.Linear(dim, dim_head * 2, bias = True)
         self.to_out = nn.Linear(inner_dim, dim)
 
     def forward(self, x, *, xl_memory = None, rel_pos_bias = None):
@@ -298,7 +312,7 @@ class MemorizingTransformerEncoder(nn.Module):
         heads = 8,
         knn_attn_heads = None,
         attn_dropout = 0.,
-        ff_mult = 4,
+        intermediate_dim = 4,
         ff_dropout = 0.,
         memorizing_layers = None,
         max_knn_memories = 250000,
@@ -373,7 +387,7 @@ class MemorizingTransformerEncoder(nn.Module):
 
             self.layers.append(nn.ModuleList([
                 block_wrapper(attn),
-                block_wrapper(FeedForward(dim = dim, mult = ff_mult, dropout = ff_dropout)),
+                block_wrapper(FeedForward(dim = dim, intermediate_dim = intermediate_dim, dropout = ff_dropout)),
             ]))
 
         # memory layer shifting

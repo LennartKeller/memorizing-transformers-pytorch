@@ -17,7 +17,7 @@ class MemorizingTransformerConfig(PretrainedConfig):
             heads = 12,
             knn_attn_heads = None,
             attn_dropout = 0.,
-            ff_mult = 4,
+            intermediate_dim = 4096,
             ff_dropout = 0.,
             memorizing_layers = None,
             max_knn_memories = 250000,
@@ -41,7 +41,7 @@ class MemorizingTransformerConfig(PretrainedConfig):
         self.heads = heads
         self.knn_attn_heads = knn_attn_heads
         self.attn_dropout = attn_dropout
-        self.ff_mult = ff_mult
+        self.intermediate_dim = intermediate_dim
         self.ff_dropout = ff_dropout
         self.memorizing_layers = memorizing_layers
         self.max_knn_memories = max_knn_memories
