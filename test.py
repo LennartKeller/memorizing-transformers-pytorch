@@ -1,5 +1,5 @@
 import torch
-from memorizing_transformers_pytorch import MemorizingTransformerEncoder, HFMemorizingTransformerConfig, HFMemorizingTransformerModel, HFMemorizingTransformerForMaskedLM
+from memorizing_transformers_pytorch import MemorizingTransformerEncoder, MemorizingTransformerConfig, MemorizingTransformerModel, MemorizingTransformerForMaskedLM
 
 model = MemorizingTransformerEncoder(
     num_tokens = 20000,                 # number of tokens
@@ -18,7 +18,7 @@ knn_memories = model.create_knn_memories(batch_size = 2) # create collection of 
 
 embeddings = model(data, knn_memories = knn_memories) # (2, 1024, 512)
 
-config = HFMemorizingTransformerConfig(
+config = MemorizingTransformerConfig(
     num_tokens = 20000,                 # number of tokens
     dim = 512,                          # dimension
     dim_head = 64,                      # dimension per attention head
@@ -29,10 +29,10 @@ config = HFMemorizingTransformerConfig(
     clear_memories_on_sos_token_id = 1, # clear passed in ANN memories automatically for batch indices which contain this specified SOS token id - otherwise, you can also manually iterate through the ANN memories and clear the indices before the next iteration
 )
 
-hf_model = HFMemorizingTransformerModel(config)
-hf_model.save_pretrained("_test")
-hf_config = HFMemorizingTransformerConfig.from_pretrained("_test")
-hf_model = HFMemorizingTransformerForMaskedLM.from_pretrained("_test", config=hf_config)
+hf_model = MemorizingTransformerModel(config)
+hf_model.save_pretrained("_test/model")
+hf_config = MemorizingTransformerConfig.from_pretrained("_test/model")
+hf_model = MemorizingTransformerForMaskedLM.from_pretrained("_test/model", config=hf_config)
 data = torch.randint(0, 20000, (2, 1024))
 print("d", data.size())
 outputs = hf_model(input_ids=data, labels=data)

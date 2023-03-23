@@ -37,8 +37,6 @@ import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
-    AutoConfig,
-    AutoModelForMaskedLM,
     AutoTokenizer,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
@@ -51,7 +49,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-from memorizing_transformers_pytorch import HFMemorizingTransformerConfig, HFMemorizingTransformerForMaskedLM
+from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.28.0.dev0")
@@ -373,7 +371,7 @@ def main():
         # config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
         raise NotImplementedError("Config can only be loaded from disk for now.")
     elif model_args.model_name_or_path:
-        config = HFMemorizingTransformerConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
+        config = MemorizingTransformerConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
         config = CONFIG_MAPPING[model_args.model_type]()
         logger.warning("You are instantiating a new config instance from scratch.")
@@ -399,7 +397,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = AutoModelForMaskedLM.from_pretrained(
+        model = MemorizingTransformerForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
@@ -410,7 +408,7 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = HFMemorizingTransformerForMaskedLM.from_config(config)
+        model = MemorizingTransformerForMaskedLM.from_config(config)
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.

@@ -5,12 +5,60 @@ from torch import Tensor
 from transformers import PreTrainedModel, PretrainedConfig
 from transformers.modeling_outputs import BaseModelOutput, MaskedLMOutput
 from memorizing_transformers_pytorch.memorizing_transformers_encoder_pytorch import MemorizingTransformerEncoder
+from memorizing_transformers_pytorch.knn_memory import DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
 
-class HFMemorizingTransformerConfig(PretrainedConfig):
-    def __init__(self, **kwargs):
+class MemorizingTransformerConfig(PretrainedConfig):
+    def __init__(
+            self,
+            num_tokens = 20_000,
+            dim = 768,
+            depth = 12,
+            dim_head = 64,
+            heads = 12,
+            knn_attn_heads = None,
+            attn_dropout = 0.,
+            ff_mult = 4,
+            ff_dropout = 0.,
+            memorizing_layers = None,
+            max_knn_memories = 250000,
+            num_retrieved_memories = 32,
+            clear_memories_on_sos_token_id = None,
+            clear_memories_on_eos_token_id = None,
+            knn_memories_directory = DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY,
+            shift_knn_memories_down = 0.,
+            pad_id = 0,
+            xl_max_memories = 0,
+            xl_memory_layers = None,
+            shift_xl_memories_down = 0.,
+            knn_memory_multiprocessing = False,
+            **kwargs
+    ):
         super().__init__(**kwargs)
+        self.num_tokens = num_tokens
+        self.dim = dim
+        self.depth = depth
+        self.dim_head = dim_head
+        self.heads = heads
+        self.knn_attn_heads = knn_attn_heads
+        self.attn_dropout = attn_dropout
+        self.ff_mult = ff_mult
+        self.ff_dropout = ff_dropout
+        self.memorizing_layers = memorizing_layers
+        self.max_knn_memories = max_knn_memories
+        self.num_retrieved_memories = num_retrieved_memories
+        self.clear_memories_on_sos_token_id = clear_memories_on_sos_token_id
+        self.clear_memories_on_eos_token_id = clear_memories_on_eos_token_id
+        self.knn_memories_directory = knn_memories_directory
+        self.shift_knn_memories_down = shift_knn_memories_down
+        self.pad_id = pad_id
+        self.xl_max_memories = xl_max_memories
+        self.xl_memory_layers = xl_memory_layers
+        self.shift_xl_memories_down = shift_xl_memories_down
+        self.knn_memory_multiprocessing = knn_memory_multiprocessing
 
-class HFMemorizingTransformerModel(PreTrainedModel):
+
+
+class MemorizingTransformerModel(PreTrainedModel):
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
 
@@ -35,7 +83,7 @@ class HFMemorizingTransformerModel(PreTrainedModel):
         
         return outputs
 
-class HFMemorizingTransformerForMaskedLM(HFMemorizingTransformerModel):
+class MemorizingTransformerForMaskedLM(MemorizingTransformerModel):
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         super().__init__(config, *inputs, **kwargs)
