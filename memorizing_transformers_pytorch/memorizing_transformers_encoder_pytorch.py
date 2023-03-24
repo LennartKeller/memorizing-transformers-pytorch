@@ -151,6 +151,7 @@ class Attention(nn.Module):
 
     def forward(self, x, *, xl_memory = None, rel_pos_bias = None):
         h, device = self.heads, x.device
+        # Size: n_batches, n_heads, n_tokens, n_head_dim
         q, k, v = (self.to_q(x), *self.to_kv(x).chunk(2, dim = -1))
 
         q = rearrange(q, 'b n (h d) -> b h n d', h = h)
@@ -170,7 +171,6 @@ class Attention(nn.Module):
 
         # causal_mask = torch.ones((i, j), dtype = torch.bool, device = device).triu(j - i + 1)
         # sim = sim.masked_fill(causal_mask, -torch.finfo(sim.dtype).max)
-
         attn = stable_softmax(sim)
         attn = self.dropout(attn)
 

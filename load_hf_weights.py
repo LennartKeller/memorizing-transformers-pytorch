@@ -34,6 +34,12 @@ def print_sizes(model):
     for name, tensor in model.state_dict().items():
         print(name, tensor.size())
 
+def count_params(model):
+    n_params = 0
+    for param in model.parameters():
+        n_params += param.numel()
+    return n_params
+
 def convert_config(src_config: PretrainedConfig, translation_map: Dict[str, str], **kwargs) -> MemorizingTransformerConfig:
     """_summary_
 
@@ -72,43 +78,15 @@ def convert_weights(
             counter += 1
         except KeyError:
             continue
-    
-    for func in additional_funcs:
-        trgt_state_dict = func(src_state_dict, trgt_state_dict, counter)
+    if additional_funcs is not None:
+        for func in additional_funcs:
+            trgt_state_dict = func(src_state_dict, trgt_state_dict, counter)
     
     print(f"Converted {counter} entries. (N. Entries of SRCModel = {len(src_state_dict)})")
     return trgt_state_dict
 
 
 
-
-def bert_join_key_value_projections(src_state_dict, trgt_state_dict, counter):
-    """
-    MemorizingTransformers use a joint layer to project keys and values.
-    This functions fuses the independent layers in src model to a single layer.
-    """
-    layer_idc = sorted(list(set([
-        name.split(".")[2]
-        for name in src_state_dict.keys() if name.startswith("encoder.layer.")
-        ])))
-    for layer_idx in layer_idc:
-        src_k_weights = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.key.weight"]
-        src_k_bias = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.key.bias"]
-
-        src_v_weights = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.value.weight"]
-        src_v_bias = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.value.bias"]
-        
-        weights = torch.cat((src_k_weights, src_v_weights), dim=1)
-        bias = torch.cat((src_k_bias, src_v_bias), dim=0)
-        
-        trgt_weight_name = f"encoder.layers.{layer_idx}.0.fn.to_kv.weight"
-        trgt_state_dict[trgt_weight_name] = weights
-        
-        trgt_bias_name = f"encoder.layers.{layer_idx}.0.fn.to_kv.bias"
-        trgt_state_dict[trgt_bias_name] = bias
-        counter += 4
-
-    return trgt_state_dict
 
 # HParams of Bert that can be directly translated to MemeTRF-HParams.
 BERT_CONFIG_TRANSLATE_MAP = {
@@ -120,6 +98,9 @@ BERT_CONFIG_TRANSLATE_MAP = {
     "intermediate_size": "intermediate_dim"
 }
 # Rules to convert Bert weights to corresponding memory model weights.
+# MemoryTransformers use one-headed keys and values e.g. just use the same query and value vectors for each head of any given layer
+# https://github.com/lucidrains/memorizing-transformers-pytorch/issues/5#issuecomment-1163187918
+# This means we can't copy query and values vectors from the source model...
 BERT_WEIGHT_CONVERSION_MAP = {
     # Token embeddings
     "embeddings.word_embeddings.weight": "encoder.token_emb.weight",
@@ -150,19 +131,25 @@ if __name__ == "__main__":
    config = convert_config(
        bert_model.config,
        BERT_CONFIG_TRANSLATE_MAP,
-       pad_id=bert_tokenizer.pad_token_id
+       pad_id=bert_tokenizer.pad_token_id,
+       memorizing_layers=(12, 18, 23),
+       max_knn_memories = 64000,           # maximum ANN memories to keep (once it hits this capacity, it will be reset for now, due to limitations in faiss' ability to remove entries)
+       num_retrieved_memories = 32
     )
    model = MemorizingTransformerModel(config)
    #print(model.config)
    print_sizes(model)
 
-   converted_state_dict = convert_weights(bert_model, BERT_WEIGHT_CONVERSION_MAP, additional_funcs=[bert_join_key_value_projections])
+   converted_state_dict = convert_weights(bert_model, BERT_WEIGHT_CONVERSION_MAP)
    model.load_state_dict(converted_state_dict, strict=False)
 
    model.save_pretrained("_test/mem-gbert-large")
    bert_tokenizer.model_max_length = None
    bert_tokenizer.init_kwargs["model_max_length"] = None
    bert_tokenizer.save_pretrained("_test/mem-gbert-large")
+   
+   print(count_params(bert_model))
+   print(count_params(model))
 
 
 

@@ -82,6 +82,9 @@ class MemorizingTransformerModel(PreTrainedModel):
             outputs = (embeddings,)
         
         return outputs
+    
+    def get_input_embeddings(self) -> nn.Module:
+        return self.encoder.token_emb
 
 class MemorizingTransformerForMaskedLM(MemorizingTransformerModel):
 
