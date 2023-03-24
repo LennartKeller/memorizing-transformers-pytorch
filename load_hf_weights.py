@@ -68,19 +68,47 @@ def convert_weights(
     for src_name, tensor in src_state_dict.items():
         try:
             trgt_name = conversion_map[src_name]
-            counter += 1
             trgt_state_dict[trgt_name] = tensor
+            counter += 1
         except KeyError:
             continue
+    
+    for func in additional_funcs:
+        trgt_state_dict = func(src_state_dict, trgt_state_dict, counter)
+    
     print(f"Converted {counter} entries. (N. Entries of SRCModel = {len(src_state_dict)})")
     return trgt_state_dict
 
 
 
 
+def bert_join_key_value_projections(src_state_dict, trgt_state_dict, counter):
+    """
+    MemorizingTransformers use a joint layer to project keys and values.
+    This functions fuses the independent layers in src model to a single layer.
+    """
+    layer_idc = sorted(list(set([
+        name.split(".")[2]
+        for name in src_state_dict.keys() if name.startswith("encoder.layer.")
+        ])))
+    for layer_idx in layer_idc:
+        src_k_weights = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.key.weight"]
+        src_k_bias = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.key.bias"]
 
-def bert_join_key_value_projections(src_match: re.Match, trgt_fstring: str, weights: Tensor) -> Tuple[str, Tensor]:
-    ...
+        src_v_weights = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.value.weight"]
+        src_v_bias = src_state_dict[f"encoder.layer.{layer_idx}.attention.self.value.bias"]
+        
+        weights = torch.cat((src_k_weights, src_v_weights), dim=1)
+        bias = torch.cat((src_k_bias, src_v_bias), dim=0)
+        
+        trgt_weight_name = f"encoder.layers.{layer_idx}.0.fn.to_kv.weight"
+        trgt_state_dict[trgt_weight_name] = weights
+        
+        trgt_bias_name = f"encoder.layers.{layer_idx}.0.fn.to_kv.bias"
+        trgt_state_dict[trgt_bias_name] = bias
+        counter += 4
+
+    return trgt_state_dict
 
 # HParams of Bert that can be directly translated to MemeTRF-HParams.
 BERT_CONFIG_TRANSLATE_MAP = {
@@ -128,7 +156,7 @@ if __name__ == "__main__":
    #print(model.config)
    print_sizes(model)
 
-   converted_state_dict = convert_weights(bert_model, BERT_WEIGHT_CONVERSION_MAP)
+   converted_state_dict = convert_weights(bert_model, BERT_WEIGHT_CONVERSION_MAP, additional_funcs=[bert_join_key_value_projections])
    model.load_state_dict(converted_state_dict, strict=False)
 
    model.save_pretrained("_test/mem-gbert-large")
