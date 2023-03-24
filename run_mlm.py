@@ -27,6 +27,7 @@ import os
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
+import time
 from typing import Optional
 
 import datasets
@@ -304,6 +305,9 @@ def main():
             streaming=data_args.streaming,
         )
         if "validation" not in raw_datasets.keys():
+            logger.warning("WARNING: Using a validation_split_percentage to create your validation data destroys document structure and degrades your models performance if no worse. I give you ten seconds to think about it.")
+            time.sleep(10)
+            
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,

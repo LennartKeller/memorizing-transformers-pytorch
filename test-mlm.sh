@@ -7,8 +7,8 @@ python run_mlm.py \
     --line_by_line true \
     --output_dir _test/mlm-test \
     --overwrite_output_dir true \
-    --per_device_train_batch_size 4 \
-    --per_device_eval_batch_size 8 \
+    --per_device_train_batch_size 2 \
+    --per_device_eval_batch_size 4 \
     --logging_strategy steps \
     --logging_steps 1 \
     --logging_first_step true \
