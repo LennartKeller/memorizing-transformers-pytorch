@@ -8,21 +8,56 @@ This repository deviates from the paper slightly, using a hybrid attention acros
 
 ## Install
 
-```bash
-$ pip install memorizing-transformers-pytorch
+### Linux
+
+On Linux (with CUDA), this should work fine:
+```shell
+$ pip install -e .
 ```
 
-### Build Faiss on Apple Silicon
+### Apple Silicon
 
-```bash
+On Macs with Apple Silicon installing faiss-gpu fails for obvious reasons.
+To install it, you have to build Faiss yourself
+
+#### Build Faiss on Apple Silicon
+
+1. Install LLVM and SWIG
+
+```shell
+# Depending on your system, you might need to install some additional packages.
 brew install llvm swig
 ```
+
+2. Clone Faiss Repo
+
+```bash
+git clone https://github.com/facebookresearch/faiss.git
+cd faiss
+```
+
+Generate build dir with:
 
 ```bash
 LDFLAGS="-L/opt/homebrew/opt/llvm/lib" CPPFLAGS="-I/opt/homebrew/opt/llvm/include" CXX=/opt/homebrew/opt/llvm/bin/clang++ CC=/opt/homebrew/opt/llvm/bin/clang cmake -DFAISS_ENABLE_GPU=OFF -B build .
 ```
 
-Then follow the build-instructions from the Faiss-repo!
+Then follow just the [build-instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md) from the Faiss-repo:
+
+``` shell
+$ make -C build -j faiss
+```
+
+``` shell
+$ make -C build -j swigfaiss
+$ (cd build/faiss/python && python setup.py install)
+```
+
+Finally, install Memorizing Transformers:
+
+```shell
+pip install -e .
+```
 
 ## Usage
 

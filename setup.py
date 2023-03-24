@@ -21,7 +21,7 @@ setup(
     'einops>=0.6',
     'filelock',
     'joblib',
-    'faiss-gpu',
+    'faiss-gpu ; platform_machine != "arm64"',
     'numpy',
     'torch>=1.6',
   ],
