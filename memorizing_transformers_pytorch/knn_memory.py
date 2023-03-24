@@ -59,6 +59,11 @@ class KNN():
         keep_stats = False
     ):
         index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
+        # print("Piep.")
+        # res = faiss.StandardGpuResources()
+        # _index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
+        # index = faiss.index_cpu_to_gpu(res, 0, _index)
+
         self.index = index
         self.max_num_entries = max_num_entries
         self.cap_num_entries = cap_num_entries

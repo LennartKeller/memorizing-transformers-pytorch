@@ -125,6 +125,13 @@ class ModelArguments:
             )
         },
     )
+    knn_memory_multiprocessing: bool = field(
+        default=None,
+        metadata={
+            "help": "Whether or not to use multiprocessing to speed up KNN-lookups. Per default this is specified by the model's config,"
+            "but can be overwritten here."
+        }
+    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -383,6 +390,10 @@ def main():
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
             logger.info(f"New config: {config}")
+    
+    if model_args.knn_memory_multiprocessing is not None:
+        logger.info(f"Manually overwritting model param 'knn_memory_multiprocessing' to {model_args.knn_memory_multiprocessing}")
+        config.update({"knn_memory_multiprocessing": model_args.knn_memory_multiprocessing})
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
