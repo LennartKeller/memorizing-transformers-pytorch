@@ -424,6 +424,24 @@ def main():
         column_names = list(raw_datasets["validation"].features)
     text_column_name = "text" if "text" in column_names else column_names[0]
 
+
+    # Main data processing function that will concatenate all texts from our dataset and generate chunks of
+    # max_seq_length.
+    def group_texts(examples):
+        # Concatenate all texts.
+        concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+        total_length = len(concatenated_examples[list(examples.keys())[0]])
+        # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+        # customize this part to your needs.
+        if total_length >= max_seq_length:
+            total_length = (total_length // max_seq_length) * max_seq_length
+        # Split by chunks of max_len.
+        result = {
+            k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
+            for k, t in concatenated_examples.items()
+        }
+        return result
+
     if data_args.max_seq_length is None:
         max_seq_length = tokenizer.model_max_length
         if max_seq_length > 1024:
@@ -454,7 +472,7 @@ def main():
                 examples[text_column_name],
                 padding=padding,
                 truncation=True,
-                max_length=max_seq_length,
+                #max_length=max_seq_length,
                 # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
                 # receives the `special_tokens_mask`.
                 return_special_tokens_mask=True,
@@ -475,6 +493,21 @@ def main():
                     tokenize_function,
                     batched=True,
                     remove_columns=[text_column_name],
+                )
+        
+        with training_args.main_process_first(desc="grouping texts together"):
+            if not data_args.streaming:
+                tokenized_datasets = tokenized_datasets.map(
+                    group_texts,
+                    batched=True,
+                    num_proc=data_args.preprocessing_num_workers,
+                    load_from_cache_file=not data_args.overwrite_cache,
+                    desc=f"Grouping texts in chunks of {max_seq_length}",
+                )
+            else:
+                tokenized_datasets = tokenized_datasets.map(
+                    group_texts,
+                    batched=True,
                 )
     else:
         # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
@@ -500,22 +533,6 @@ def main():
                     remove_columns=column_names,
                 )
 
-        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-        # max_seq_length.
-        def group_texts(examples):
-            # Concatenate all texts.
-            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-            total_length = len(concatenated_examples[list(examples.keys())[0]])
-            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-            # customize this part to your needs.
-            if total_length >= max_seq_length:
-                total_length = (total_length // max_seq_length) * max_seq_length
-            # Split by chunks of max_len.
-            result = {
-                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-                for k, t in concatenated_examples.items()
-            }
-            return result
 
         # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
         # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value

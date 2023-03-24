@@ -4,6 +4,7 @@ python run_mlm.py \
     --do_train true \
     --train_file _test/oscar-tiny.txt \
     --validation_split_percentage 5 \
+    --line_by_line true \
     --output_dir _test/mlm-test \
     --overwrite_output_dir true \
     --per_device_train_batch_size 4 \
