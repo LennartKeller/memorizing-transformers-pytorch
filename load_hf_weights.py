@@ -70,6 +70,7 @@ def convert_weights(
     src_state_dict = src_model.state_dict()
     trgt_state_dict= {}
     conversion_map = ConversionMap(conversion_map)
+    
     counter = 0
     for src_name, tensor in src_state_dict.items():
         try:
@@ -78,15 +79,13 @@ def convert_weights(
             counter += 1
         except KeyError:
             continue
+    
     if additional_funcs is not None:
         for func in additional_funcs:
             trgt_state_dict = func(src_state_dict, trgt_state_dict, counter)
     
     print(f"Converted {counter} entries. (N. Entries of SRCModel = {len(src_state_dict)})")
     return trgt_state_dict
-
-
-
 
 # HParams of Bert that can be directly translated to MemeTRF-HParams.
 BERT_CONFIG_TRANSLATE_MAP = {
@@ -126,6 +125,7 @@ if __name__ == "__main__":
     
    bert_model = AutoModel.from_pretrained("deepset/gbert-large") 
    bert_tokenizer = AutoTokenizer.from_pretrained("deepset/gbert-large")
+   print("Bert parameters sizes:")
    print_sizes(bert_model)
 
    config = convert_config(
@@ -133,23 +133,23 @@ if __name__ == "__main__":
        BERT_CONFIG_TRANSLATE_MAP,
        pad_id=bert_tokenizer.pad_token_id,
        memorizing_layers=(12, 18, 23),
-       max_knn_memories = 64000,           # maximum ANN memories to keep (once it hits this capacity, it will be reset for now, due to limitations in faiss' ability to remove entries)
-       num_retrieved_memories = 32
+       max_knn_memories = 64000,
+       num_retrieved_memories = 32,
+       clear_memories_on_sos_token_id=bert_tokenizer.bos_token_id # KNN memory is cleared on begin of next sequence
     )
    model = MemorizingTransformerModel(config)
-   #print(model.config)
+   print("MemoryTransformer parameters sizes:")
    print_sizes(model)
 
+   print("Number of params in source model:", count_params(bert_model))
+   print("Number of params in target model:", count_params(model))
+
+   print("Converting weights from Bert to MemoryTransformer")
    converted_state_dict = convert_weights(bert_model, BERT_WEIGHT_CONVERSION_MAP)
    model.load_state_dict(converted_state_dict, strict=False)
 
+   print("Saving MemoryTransformer")
    model.save_pretrained("_test/mem-gbert-large")
    bert_tokenizer.model_max_length = None
    bert_tokenizer.init_kwargs["model_max_length"] = None
    bert_tokenizer.save_pretrained("_test/mem-gbert-large")
-   
-   print(count_params(bert_model))
-   print(count_params(model))
-
-
-

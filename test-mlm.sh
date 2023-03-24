@@ -12,9 +12,4 @@ python run_mlm.py \
     --logging_steps 1 \
     --logging_first_step true \
     --max_seq_length 1024 \
-    --max_steps 10 \
-
-
-
-
-
+    --max_steps 2 \
