@@ -263,7 +263,6 @@ class KNNAttention(nn.Module):
 
         mem_kv, mem_mask = knn_memory.search(q, self.num_retrieved_memories)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
-        print("mem_k mem_v", mem_k.size(), mem_v.size())
 
         sim_mem = einsum('b h i d, b h i j d -> b h i j', q, mem_k) * scale
         sim_mem = sim_mem.masked_fill(~mem_mask, mask_value)
@@ -285,17 +284,14 @@ class KNNAttention(nn.Module):
         # attention (combining local and distant)
 
         sim = torch.cat((sim_mem, sim), dim = -1)
-        print("combined sim", sim.size())
         attn = stable_softmax(sim)
         attn = self.dropout(attn)
 
         local_attn, mem_attn = attn[..., self.num_retrieved_memories:], attn[..., :self.num_retrieved_memories]
-        print("local_attn mem_attn", local_attn.size(), mem_attn.size())
 
         local_out = einsum('b h i j, b j d -> b h i d', local_attn, v)
         mem_out = einsum('b h i j, b h i j d -> b h i d', mem_attn, mem_v)
 
-        print("local_out mem_out", local_out.size(), mem_out.size())
 
         out = local_out + mem_out
 
