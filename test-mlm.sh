@@ -1,7 +1,7 @@
 #!/bin/sh
 #
 TOKENIZERS_PARALLELISM=true python run_mlm.py \
-    --model_name_or_path _test/mem-bert-base-german-cased \
+    --model_name_or_path _test/mem-gbert-large \
     --knn_memory_multiprocessing false \
     --do_whole_word_masking true \
     --do_train true \
@@ -15,5 +15,5 @@ TOKENIZERS_PARALLELISM=true python run_mlm.py \
     --logging_steps 1 \
     --logging_first_step true \
     --evaluation_strategy steps \
-    --eval_steps 100 \
+    --eval_steps 10 \
     --seed 42 \

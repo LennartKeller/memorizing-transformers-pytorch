@@ -109,7 +109,6 @@ class MemorizingTransformerModel(PreTrainedModel):
             inputs = BatchEncoding(dict(input_ids=input_ids, **kwargs))
         segments = self._split_batch_into_segments(inputs)
         n_segments = len(segments) - 1
-        print("ns", len(segments))
         segment_outputs = []
         batch_size, *_ = input_ids.size()
         # TODO backprop

@@ -6,6 +6,7 @@ import torch
 from torch import nn
 from torch.utils.data import DataLoader
 from transformers import Trainer, TrainingArguments, BatchEncoding
+from datasets import Dataset
 
 logger = logging.getLogger(__name__)
 
@@ -77,13 +78,23 @@ class MemorizingTransformerTrainer(Trainer):
     #     return None
 
     def get_train_dataloader(self) -> DataLoader:
-        """
-        Todo the original version of this methods bugs for some reasons.
-        Check if or live with it.
-        """
+        # TODO the original version of this methods bugs for some reasons.
+        # Check if or live with it.
         return DataLoader(
             self.train_dataset,
             batch_size=self._train_batch_size,
+            sampler=None,
+            collate_fn=self.data_collator,
+            drop_last=self.args.dataloader_drop_last,
+            num_workers=self.args.dataloader_num_workers,
+            pin_memory=self.args.dataloader_pin_memory
+        )
+    
+    def get_eval_dataloader(self, eval_dataset: Optional[Dataset] = None) -> DataLoader:
+        # TODO here is somethig broken too....
+        return DataLoader(
+            self.eval_dataset,
+            batch_size=self.args.eval_batch_size,
             sampler=None,
             collate_fn=self.data_collator,
             drop_last=self.args.dataloader_drop_last,
