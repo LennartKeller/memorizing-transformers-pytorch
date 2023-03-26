@@ -1,7 +1,6 @@
 import re
-from collections import UserDict, OrderedDict
-from typing import Callable, Dict, List, Tuple, Union
-import torch
+from collections import UserDict
+from typing import Callable, Dict, List, Union
 from torch import nn
 from torch import Tensor
 from memorizing_transformers_pytorch import MemorizingTransformerModel, MemorizingTransformerConfig

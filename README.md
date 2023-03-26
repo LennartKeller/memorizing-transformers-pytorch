@@ -9,37 +9,39 @@ This repository deviates from the paper slightly, using a hybrid attention acros
 ## Install
 
 ### Linux
+To install this branch, clone the repo and then use pip.
 
-On Linux (with CUDA), this should work fine:
+On Linux (with CUDA installed), this should work fine:
 ```shell
 $ pip install -e .
 ```
 
 ### Apple Silicon
+MemorizingTransformers use Faiss to cache key- and value-token-embeddings from previous segments.
 
-On Macs with Apple Silicon installing faiss-gpu fails for obvious reasons.
-To install it, you have to build Faiss yourself
+On Macs with Apple Silicon architecture, installing `faiss-gpu` fails for obvious reasons.
+So, you have to build Faiss yourself to install this package.
 
 #### Build Faiss on Apple Silicon
 
-1. Install LLVM and SWIG
+1. Install LLVM and SWIG:
 
 ```shell
 # Depending on your system, you might need to install some additional packages.
-brew install llvm swig
+$ brew install llvm swig
 ```
 
-2. Clone Faiss Repo
+2. Clone Faiss Repo:
 
 ```bash
-git clone https://github.com/facebookresearch/faiss.git
-cd faiss
+$ git clone https://github.com/facebookresearch/faiss.git
+$ cd faiss
 ```
 
-Generate build dir with:
+Generate build files with:
 
 ```bash
-LDFLAGS="-L/opt/homebrew/opt/llvm/lib" CPPFLAGS="-I/opt/homebrew/opt/llvm/include" CXX=/opt/homebrew/opt/llvm/bin/clang++ CC=/opt/homebrew/opt/llvm/bin/clang cmake -DFAISS_ENABLE_GPU=OFF -B build .
+$ LDFLAGS="-L/opt/homebrew/opt/llvm/lib" CPPFLAGS="-I/opt/homebrew/opt/llvm/include" CXX=/opt/homebrew/opt/llvm/bin/clang++ CC=/opt/homebrew/opt/llvm/bin/clang cmake -DFAISS_ENABLE_GPU=OFF -B build .
 ```
 
 Then follow just the [build-instructions](https://github.com/facebookresearch/faiss/blob/main/INSTALL.md) from the Faiss-repo:
@@ -56,7 +58,7 @@ $ (cd build/faiss/python && python setup.py install)
 Finally, install Memorizing Transformers:
 
 ```shell
-pip install -e .
+$ pip install -e .
 ```
 
 ## Usage
