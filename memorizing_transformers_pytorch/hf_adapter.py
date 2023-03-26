@@ -108,6 +108,7 @@ class MemorizingTransformerModel(PreTrainedModel):
         else:
             inputs = BatchEncoding(dict(input_ids=input_ids, **kwargs))
         segments = self._split_batch_into_segments(inputs)
+        n_segments = len(segments) - 1
         print("ns", len(segments))
         segment_outputs = []
         batch_size, *_ = input_ids.size()
@@ -117,13 +118,12 @@ class MemorizingTransformerModel(PreTrainedModel):
                 segment_output = self.forward_segment(knn_memories=knn_memories, return_dict=return_dict, **segment)
                 # If model is in training mode, there are labels, and we process a non-final segment, then we do backprop.
                 if self.training and labels is not None:
-                    if seg_idx < len(segments) - 1:
-                        if return_dict:
-                            loss = segment_output["loss"]
-                        else:
-                            loss = segment_output[0]
-                        scaled_loss = loss / len(segments) 
-                        scaled_loss.backward()
+                    if seg_idx < n_segments:
+                        segment_output = self._backpropagate_and_detach(
+                            segment_output=segment_output,
+                            return_dict=return_dict,
+                            n_segments=n_segments
+                        )
                 segment_outputs.append(segment_output)
         if return_dict:
             outputs = self._gather_results_from_dicts(segment_outputs)
@@ -193,12 +193,25 @@ class MemorizingTransformerModel(PreTrainedModel):
         if labels is None:
             outputs = (loss,) + outputs
         return outputs
+    
+    @staticmethod
+    def _backpropagate_and_detach(segment_output, return_dict, n_segments):
+        if return_dict:
+            loss = segment_output["loss"]
+        else:
+            loss = segment_output[0]
         
-        
+        scaled_loss = loss / n_segments
+        scaled_loss.backward()
 
-
-
-
+        if return_dict:
+            segment_output = {
+                key: tensor.detach()
+                for key, tensor in segment_output.items()
+            }
+        else:
+            segment_output = tuple([tensor.detach() for tensor in segment_output])
+        return segment_output
 
 
 class MemorizingTransformerForMaskedLM(MemorizingTransformerModel):
@@ -220,7 +233,6 @@ class MemorizingTransformerForMaskedLM(MemorizingTransformerModel):
         
         if labels is not None:
             *_, num_tokens = logits.size()
-            # TODO a bug here indicates errors in chunking... and there is a bug here.
             loss = F.cross_entropy(logits.reshape(-1, num_tokens), labels.reshape(-1))
         
         if return_dict:
