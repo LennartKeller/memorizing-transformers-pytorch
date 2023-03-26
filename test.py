@@ -2,9 +2,9 @@ import torch
 from transformers import AutoTokenizer
 from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
 
-tokenizer = AutoTokenizer.from_pretrained("_test/mlm-test/checkpoint-2000")
-config = MemorizingTransformerConfig.from_pretrained("_test/mlm-test/checkpoint-2000")
-model = MemorizingTransformerForMaskedLM.from_pretrained("_test/mlm-test/checkpoint-1500", config=config)
+tokenizer = AutoTokenizer.from_pretrained("_test/mem-bert-base-german-cased")
+config = MemorizingTransformerConfig.from_pretrained("_test/mem-bert-base-german-cased")
+model = MemorizingTransformerForMaskedLM.from_pretrained("_test/mem-bert-base-german-cased", config=config)
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = model.to(device)

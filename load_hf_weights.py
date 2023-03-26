@@ -136,7 +136,8 @@ if __name__ == "__main__":
        max_knn_memories = 128_000,
        num_retrieved_memories = 32,
        clear_memories_on_sos_token_id=bert_tokenizer.bos_token_id, # KNN memory is cleared on begin of next sequence
-       knn_memory_multiprocessing=True
+       knn_memory_multiprocessing=True,
+       max_seq_length=512
     )
    model = MemorizingTransformerModel(config)
    print("MemoryTransformer parameters sizes:")
@@ -151,8 +152,8 @@ if __name__ == "__main__":
 
    print("Saving MemoryTransformer")
    model.save_pretrained("_test/mem-gbert-large")
-   bert_tokenizer.model_max_length = None
-   bert_tokenizer.init_kwargs["model_max_length"] = None
+   bert_tokenizer.model_max_length = 512
+   bert_tokenizer.init_kwargs["model_max_length"] = 512
    bert_tokenizer.save_pretrained("_test/mem-gbert-large")
 
    #############################################################
@@ -170,7 +171,8 @@ if __name__ == "__main__":
        max_knn_memories = 128_000,
        num_retrieved_memories = 32,
        clear_memories_on_sos_token_id=bert_tokenizer.bos_token_id, # KNN memory is cleared on begin of next sequence
-       knn_memory_multiprocessing=True
+       knn_memory_multiprocessing=True,
+       max_seq_length=512
     )
    model = MemorizingTransformerModel(config)
    print("MemoryTransformer parameters sizes:")
@@ -185,6 +187,6 @@ if __name__ == "__main__":
    
    print("Saving MemoryTransformer")
    model.save_pretrained("_test/mem-bert-base-german-cased")
-   bert_tokenizer.model_max_length = None
-   bert_tokenizer.init_kwargs["model_max_length"] = None
+   bert_tokenizer.model_max_length = 512
+   bert_tokenizer.init_kwargs["model_max_length"] = 512
    bert_tokenizer.save_pretrained("_test/mem-bert-base-german-cased")
