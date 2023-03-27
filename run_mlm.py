@@ -580,14 +580,6 @@ def main():
         #             batched=True,
         #         )
 
-    if training_args.do_train:
-        if "train" not in tokenized_datasets:
-            raise ValueError("--do_train requires a train dataset")
-        train_dataset = tokenized_datasets["train"]
-        if data_args.max_train_samples is not None:
-            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
-            train_dataset = train_dataset.select(range(max_train_samples))
-    
     # Sort examples in train dataset by text_length 
     # to avoid having extremely unbalanced batches and
     # be able to slowly allow the model adapt to leverage knowledge from extremely long contexts (?)
@@ -599,7 +591,7 @@ def main():
     
     with training_args.main_process_first(desc="dataset sort by text length"):
         if not data_args.streaming:
-            train_dataset = train_dataset.map(
+            tokenized_datasets = tokenized_datasets.map(
                 get_text_length,
                 batched=True,
                 num_proc=data_args.preprocessing_num_workers,
@@ -607,14 +599,22 @@ def main():
                 desc="Counting texts lengths.",
             )
         else:
-            train_dataset = train_dataset.map(
+            tokenized_datasets = tokenized_datasets.map(
                 get_text_length,
-                batched=True,
-                batch_size=2
+                batched=True
             )
     
+    if training_args.do_train:
+        if "train" not in tokenized_datasets:
+            raise ValueError("--do_train requires a train dataset")
+        train_dataset = tokenized_datasets["train"]
+        if data_args.max_train_samples is not None:
+            max_train_samples = min(len(train_dataset), data_args.max_train_samples)
+            train_dataset = train_dataset.select(range(max_train_samples))
+    
+    
     # Reverse=True for debugging longer texts!
-    train_dataset = train_dataset.sort("text_length", reverse=True)
+    train_dataset = train_dataset.sort("text_length", reverse=False)
     train_dataset = train_dataset.remove_columns(["text_length"])
 
     if training_args.do_eval:
@@ -635,6 +635,7 @@ def main():
         metric = evaluate.load("accuracy")
 
         def compute_metrics(eval_preds):
+            print("Computing metrics")
             preds, labels = eval_preds
             # preds have the same shape as the labels, after the argmax(-1) has been calculated
             # by preprocess_logits_for_metrics

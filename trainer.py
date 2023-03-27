@@ -31,7 +31,6 @@ class MemorizingTransformerTrainingArguments(TrainingArguments):
     # )
 
 class MemorizingTransformerTrainer(Trainer):
-    ...
     # def training_step(self, model: nn.Module, inputs: Dict[str, Union[torch.Tensor, Any]]) -> torch.Tensor:
     #     segments = self._split_batch_into_segments(inputs=inputs)
     #     segment_outputs = []
