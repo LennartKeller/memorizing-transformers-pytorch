@@ -5,6 +5,7 @@ import faiss
 import numpy as np
 from pathlib import Path
 from functools import wraps
+from torch import nn
 
 from contextlib import ExitStack, contextmanager
 
@@ -49,7 +50,49 @@ def check_shape(tensor, pattern, **kwargs):
 # a wrapper around faiss IndexIVFFlat
 # taking care of expiring old keys automagically
 
-class KNN():
+class Index(nn.Module):
+    def __init__(self, max_num_entries: int, dim: int):
+        super().__init__()
+        self.max_num_entries = max_num_entries
+        self.dim = dim
+        self._init_index()
+    def _init_index(self):
+        self._index = torch.tensor([], requires_grad=False, dtype=torch.float)
+    def to(self, device):
+        super().to(device)
+        self._index = self._index.to(device)
+    def reset(self):
+        self._init_index()
+    def add(self, x):
+        x = x.reshape(-1, self.dim).clone().requires_grad_(False)
+        if self._index.ndim == 1:
+            self._index = x[:self.max_num_entries, ...]
+        else:
+            index_size, new_size = self._index.size(0), x.size(0)
+            if (comb_size := index_size + new_size) > self.max_num_entries:
+                offset = comb_size - self.max_num_entries
+            else:
+                offset = 0
+            self._index = torch.cat((self._index[offset:, ...], x), dim=0)
+    def search(self, query: torch.Tensor, k: int) -> torch.Tensor:        
+        # Metric is dot prodcut for now...
+        with torch.no_grad():
+            # Shape => n_queries, n_memories
+            dists = (self._index @ query.T).T
+        def get_top_k(tensor):
+            top_k = tensor[:, -k:]#.cpu().detach().numpy()
+            return top_k
+        sorted_dist, indices = map(get_top_k, torch.sort(dists, dim=0))
+        return sorted_dist, indices
+    def __del__(self):
+        # Strangely, this methods seem to reduce burden on memory???
+        self._index = self._index.detach().cpu()
+        self._init_index()
+        del self._index
+        del self
+
+
+class KNN(nn.Module):
     def __init__(
         self,
         dim,
@@ -58,21 +101,21 @@ class KNN():
         M = 15,
         keep_stats = False
     ):
-        index = faiss.IndexHNSWFlat(dim, M, faiss.METRIC_INNER_PRODUCT)
+        super().__init__()
+        
+        self.index = Index(max_num_entries, dim)
 
-        # Leads to OOM even on large GPUs
-        # res = faiss.StandardGpuResources()
-        # _index = faiss.IndexFlatIP(dim)
-        # index = faiss.index_cpu_to_gpu(res, 0, _index)
-
-        self.index = index
         self.max_num_entries = max_num_entries
         self.cap_num_entries = cap_num_entries
         self.is_trained = False
         self.keep_stats = keep_stats
 
         self.reset()
-
+    
+    def to(self, device):
+        super().to(device)
+        self.index.to(device)
+    
     def __del__(self):
         if hasattr(self, 'index'):
             del self.index
@@ -89,7 +132,6 @@ class KNN():
         self.is_trained = False
 
     def train(self, x):
-        self.index.train(x)
         self.is_trained = True
 
     def add(self, x, ids):
@@ -117,11 +159,12 @@ class KNN():
         increment_hits = False,
         increment_age = True
     ):
+        print(self.index._index.size())
+        # Our index doesn't need training..
         if not self.is_trained:
-            return np.full((x.shape[0], topk), -1)
-        print("query", x.shape)
+            return torch.full((x.shape[0], topk), -1, device=x.device)
+
         distances, indices = self.index.search(x, k = topk)
-        print("result", distances.shape, indices.shape)
 
         if increment_hits and self.keep_stats:
             hits = count_intersect(self.ids, rearrange(indices, '... -> (...)'))
@@ -135,21 +178,23 @@ class KNN():
 
         if return_distances:
             return indices, distances
-        
+
         return indices
 
 # KNN memory layer, where one can store key / value memories
 # can automatically take care of a collection of faiss indices (across batch dimension)
 
-class KNNMemory():
+class KNNMemory(nn.Module):
     def __init__(
         self,
         dim,
         max_memories = 16000,
         num_indices = 1,
         memmap_filename = './knn.memory.memmap',
-        multiprocessing = True
+        multiprocessing = True,
+        device=None
     ):
+        super().__init__()
         self.dim = dim
         self.num_indices = num_indices
         self.scoped_indices = list(range(num_indices))
@@ -158,11 +203,21 @@ class KNNMemory():
         self.shape = (num_indices, max_memories, 2, dim)
         self.db_offsets = np.zeros(num_indices, dtype = np.int32)
 
-        self.db = np.memmap(memmap_filename, mode = 'w+', dtype = np.float32, shape = self.shape)
-        # self.db = np.empty(dtype = np.float32, shape = self.shape)
+        #self.db = np.memmap(memmap_filename, mode = 'w+', dtype = np.float32, shape = self.shape)
+        self.db = np.empty(dtype = np.float32, shape = self.shape)
         self.knns = [KNN(dim = dim, max_num_entries = max_memories, cap_num_entries = True) for _ in range(num_indices)]
     
         self.n_jobs = cpu_count() if multiprocessing else 1
+        if device is None:
+            device = "cuda:0" if torch.cuda.is_available() else "cpu"
+        self.device = device
+        self.to(self.device)
+        
+    def to(self, device):
+        self.device = device
+        super().to(device)
+        for knn in self.knns:
+            knn.to(device)
 
     def set_scoped_indices(self, indices):
         indices = list(indices)
@@ -192,32 +247,34 @@ class KNNMemory():
     def add(self, memories):
         check_shape(memories, 'b n kv d', d = self.dim, kv = 2, b = len(self.scoped_indices))
 
-        memories = memories.detach().cpu().numpy()
+        memories = memories.detach()
         memories = memories[:, -self.max_memories:]
         num_memories = memories.shape[1]
 
         knn_insert_ids = np.arange(num_memories)
 
-        keys = np.ascontiguousarray(memories[..., 0, :])
+        keys = torch.split(memories[..., 0, :], 1, dim=0)
         knns = [self.knns[i] for i in self.scoped_indices]
         db_offsets = [self.db_offsets[i] for i in self.scoped_indices]
 
         # use joblib to insert new key / value memories into faiss index
 
-        @delayed
+        # @delayed
         def knn_add(knn, key, db_offset):
             knn.add(key, ids = knn_insert_ids + db_offset)
             return knn
 
-        updated_knns = Parallel(n_jobs = self.n_jobs)(knn_add(*args) for args in zip(knns, keys, db_offsets))
+        # updated_knns = Parallel(n_jobs = self.n_jobs)(knn_add(*args) for args in zip(knns, keys, db_offsets))
+        updated_knns = [knn_add(*args) for args in zip(knns, keys, db_offsets)]
+
         for knn_idx, scoped_idx in enumerate(self.scoped_indices):
             self.knns[scoped_idx] = updated_knns[knn_idx]
 
         # add the new memories to the memmap "database"
 
         add_indices = (rearrange(np.arange(num_memories), 'j -> 1 j') + rearrange(self.db_offsets[list(self.scoped_indices)], 'i -> i 1')) % self.max_memories
-        self.db[rearrange(np.array(self.scoped_indices), 'i -> i 1'), add_indices] = memories
-        self.db.flush()
+        self.db[rearrange(np.array(self.scoped_indices), 'i -> i 1'), add_indices] = memories.cpu().detach().numpy()
+        #self.db.flush()
 
         self.db_offsets += num_memories
 
@@ -228,12 +285,13 @@ class KNNMemory():
         nprobe = 8,
         increment_hits = True,
         increment_age = True
-    ):
+    ):  
         check_shape(queries, 'b ... d', d = self.dim, b = len(self.scoped_indices))
         queries, ps = pack([queries], 'b * d')
 
         device = queries.device
-        queries = queries.detach().cpu().numpy()
+        queries = queries.clone().detach().to(self.device)
+        
 
         all_masks = []
         all_key_values = []
@@ -242,33 +300,32 @@ class KNNMemory():
 
         # parallelize faiss search
 
-        @delayed
+        # @delayed
         def knn_search(knn, query):
             return knn.search(query, topk, nprobe, increment_hits = increment_hits, increment_age = increment_age)
 
-        fetched_indices = Parallel(n_jobs = self.n_jobs)(knn_search(*args) for args in zip(knns, queries))
+        # fetched_indices = Parallel(n_jobs = self.n_jobs)(knn_search(*args) for args in zip(knns, queries))
+        fetched_indices = [knn_search(*args) for args in zip(knns, queries)]
 
         # get all the memory key / values from memmap 'database'
         # todo - remove for loop below
 
         for batch_index, indices in zip(self.scoped_indices, fetched_indices):
-            print(batch_index, indices.shape)
-            mask = indices !=  -1
-            db_indices = np.where(mask, indices, 0)
+            mask = (indices !=  -1).to(device)
+            db_indices = torch.where(mask, indices, 0)
 
-            all_masks.append(torch.from_numpy(mask))
-
-            key_values = self.db[batch_index, db_indices % self.max_memories]
-            all_key_values.append(torch.from_numpy(key_values))
-
+            # all_masks.append(torch.from_numpy(mask))
+            all_masks.append(mask)
+            key_values = self.db[batch_index, db_indices.cpu().numpy() % self.max_memories]
+            
+            all_key_values.append(torch.from_numpy(key_values).to(device))
         all_masks = torch.stack(all_masks)
         all_key_values = torch.stack(all_key_values)
         all_key_values = all_key_values.masked_fill(~rearrange(all_masks, '... -> ... 1 1'), 0.)
 
         all_key_values, = unpack(all_key_values, ps, 'b * n kv d')
         all_masks, = unpack(all_masks, ps, 'b * n')
-
-        return all_key_values.to(device), all_masks.to(device)
+        return all_key_values.to(device).requires_grad_(False), all_masks.to(device).requires_grad_(False)
 
     def __del__(self):
         if hasattr(self, 'knns'):

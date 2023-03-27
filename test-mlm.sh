@@ -1,6 +1,6 @@
 #!/bin/sh
 #
-TOKENIZERS_PARALLELISM=true python run_mlm.py \
+TOKENIZERS_PARALLELISM=true WANDB_DISABLED=true python run_mlm.py \
     --model_name_or_path _test/mem-gbert-large \
     --knn_memory_multiprocessing false \
     --do_whole_word_masking true \

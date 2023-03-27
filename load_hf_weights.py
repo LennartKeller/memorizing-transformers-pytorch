@@ -133,7 +133,7 @@ if __name__ == "__main__":
        BERT_CONFIG_TRANSLATE_MAP,
        pad_id=bert_tokenizer.pad_token_id,
        memorizing_layers=(12, 18, 23),
-       max_knn_memories = 128_000,
+       max_knn_memories = 2048,
        num_retrieved_memories = 32,
        clear_memories_on_sos_token_id=bert_tokenizer.bos_token_id, # KNN memory is cleared on begin of next sequence
        knn_memory_multiprocessing=True,
@@ -168,7 +168,7 @@ if __name__ == "__main__":
        BERT_CONFIG_TRANSLATE_MAP,
        pad_id=bert_tokenizer.pad_token_id,
        memorizing_layers=(6, 9),
-       max_knn_memories = 128_000,
+       max_knn_memories = 2048,
        num_retrieved_memories = 32,
        clear_memories_on_sos_token_id=bert_tokenizer.bos_token_id, # KNN memory is cleared on begin of next sequence
        knn_memory_multiprocessing=True,

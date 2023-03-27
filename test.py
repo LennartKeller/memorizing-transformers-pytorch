@@ -1,10 +1,14 @@
+import sys
 import torch
 from transformers import AutoTokenizer
 from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
 
-tokenizer = AutoTokenizer.from_pretrained("_test/mem-bert-base-german-cased")
-config = MemorizingTransformerConfig.from_pretrained("_test/mem-bert-base-german-cased")
-model = MemorizingTransformerForMaskedLM.from_pretrained("_test/mem-bert-base-german-cased", config=config)
+MODEL_PATH = sys.argv[1] if len(sys.argv) > 1 else "_test/mem-bert-base-german-cased"
+print(f"Using model {MODEL_PATH}")
+
+tokenizer = AutoTokenizer.from_pretrained(MODEL_PATH)
+config = MemorizingTransformerConfig.from_pretrained(MODEL_PATH)
+model = MemorizingTransformerForMaskedLM.from_pretrained(MODEL_PATH, config=config)
 
 device = "cuda:0" if torch.cuda.is_available() else "cpu"
 model = model.to(device)
