@@ -119,9 +119,7 @@ class KNN():
     ):
         if not self.is_trained:
             return np.full((x.shape[0], topk), -1)
-        print("query", x.shape)
         distances, indices = self.index.search(x, k = topk)
-        print("result", distances.shape, indices.shape)
 
         if increment_hits and self.keep_stats:
             hits = count_intersect(self.ids, rearrange(indices, '... -> (...)'))
@@ -252,7 +250,6 @@ class KNNMemory():
         # todo - remove for loop below
 
         for batch_index, indices in zip(self.scoped_indices, fetched_indices):
-            print(batch_index, indices.shape)
             mask = indices !=  -1
             db_indices = np.where(mask, indices, 0)
 

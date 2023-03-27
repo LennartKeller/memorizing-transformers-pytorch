@@ -614,7 +614,7 @@ def main():
             )
     
     # Reverse=True for debugging longer texts!
-    train_dataset = train_dataset.sort("text_length", reverse=False)
+    train_dataset = train_dataset.sort("text_length", reverse=True)
     train_dataset = train_dataset.remove_columns(["text_length"])
 
     if training_args.do_eval:
