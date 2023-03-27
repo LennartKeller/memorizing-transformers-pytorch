@@ -14,7 +14,8 @@ conda activate mem_bert && python run_mlm.py \
     --output_dir /pfs/work7/workspace/scratch/ma_lennkell-mem_bert/pretraining/wiki-de/mem-gbert-large \
     --run_name mem-gbert-large \
     --max_steps 250000 \
-    --warmup_ratio 5 \
+    --warmup_ratio 0.05 \
+    --preprocessing_num_workers 16 \
     --per_device_train_batch_size 8 \
     --per_device_eval_batch_size 16 \
     --logging_strategy steps \
