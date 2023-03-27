@@ -159,7 +159,6 @@ class KNN(nn.Module):
         increment_hits = False,
         increment_age = True
     ):
-        print(self.index._index.size())
         # Our index doesn't need training..
         if not self.is_trained:
             return torch.full((x.shape[0], topk), -1, device=x.device)
