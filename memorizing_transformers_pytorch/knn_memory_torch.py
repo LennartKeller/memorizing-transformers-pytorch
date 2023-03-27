@@ -74,11 +74,9 @@ class Index(nn.Module):
             else:
                 offset = 0
             self._index = torch.cat((self._index[offset:, ...], x), dim=0)
-    def search(self, query: torch.Tensor, k: int) -> torch.Tensor:        
-        # Metric is dot prodcut for now...
-        with torch.no_grad():
-            # Shape => n_queries, n_memories
-            dists = (self._index @ query.T).T
+    def search(self, query: torch.Tensor, k: int) -> torch.Tensor:   
+        # Shape n_queries, n_mems
+        dists = (self._index @ query.T).T
         def get_top_k(tensor):
             top_k = tensor[:, -k:]#.cpu().detach().numpy()
             return top_k
@@ -161,7 +159,7 @@ class KNN(nn.Module):
     ):
         # Our index doesn't need training..
         if not self.is_trained:
-            return torch.full((x.shape[0], topk), -1, device=x.device)
+            return torch.full((x.shape[0], topk), -1, device=x.device, requires_grad=False)
 
         distances, indices = self.index.search(x, k = topk)
 
@@ -203,7 +201,7 @@ class KNNMemory(nn.Module):
         self.db_offsets = np.zeros(num_indices, dtype = np.int32)
 
         #self.db = np.memmap(memmap_filename, mode = 'w+', dtype = np.float32, shape = self.shape)
-        self.db = np.empty(dtype = np.float32, shape = self.shape)
+        self.db = np.zeros(dtype = np.float32, shape = self.shape)
         self.knns = [KNN(dim = dim, max_num_entries = max_memories, cap_num_entries = True) for _ in range(num_indices)]
     
         self.n_jobs = cpu_count() if multiprocessing else 1
@@ -289,7 +287,7 @@ class KNNMemory(nn.Module):
         queries, ps = pack([queries], 'b * d')
 
         device = queries.device
-        queries = queries.clone().detach().to(self.device)
+        # queries = queries.clone().detach().to(self.device)
         
 
         all_masks = []
@@ -316,15 +314,14 @@ class KNNMemory(nn.Module):
             # all_masks.append(torch.from_numpy(mask))
             all_masks.append(mask)
             key_values = self.db[batch_index, db_indices.cpu().numpy() % self.max_memories]
-            
-            all_key_values.append(torch.from_numpy(key_values).to(device))
-        all_masks = torch.stack(all_masks)
-        all_key_values = torch.stack(all_key_values)
+            all_key_values.append(torch.from_numpy(key_values))
+        all_masks = torch.stack(all_masks).to(device)
+        all_key_values = torch.stack(all_key_values).to(device).requires_grad_(False)
         all_key_values = all_key_values.masked_fill(~rearrange(all_masks, '... -> ... 1 1'), 0.)
 
         all_key_values, = unpack(all_key_values, ps, 'b * n kv d')
         all_masks, = unpack(all_masks, ps, 'b * n')
-        return all_key_values.to(device).requires_grad_(False), all_masks.to(device).requires_grad_(False)
+        return all_key_values, all_masks
 
     def __del__(self):
         if hasattr(self, 'knns'):
