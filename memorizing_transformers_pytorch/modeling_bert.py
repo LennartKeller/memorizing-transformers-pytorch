@@ -452,7 +452,7 @@ class BertKNNSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-        
+
         # 1. Search in NN-Index
         # TODOs
         # Make attention masks work..
@@ -490,7 +490,7 @@ class BertKNNSelfAttention(nn.Module):
         knn_memory.add(new_kv_memories)
         
 
-
+        # 3. Prepend current keys and values with retrieved keys and values
         def reshape_into_flat_sequence(memory):
             """
             Input-Shape: [n_batches, n_tokens, n_retrieved_embs, hidden_size]
@@ -503,7 +503,8 @@ class BertKNNSelfAttention(nn.Module):
         mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
         key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
         value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
-
+        
+        # 4. Continue with standard self-attention...
         use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
