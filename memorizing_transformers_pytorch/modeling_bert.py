@@ -459,6 +459,10 @@ class BertKNNSelfAttention(nn.Module):
         # Pass num retrieved memories as argument
         attention_mask = None
         def query_flatten_head_dim(query_layer):
+            """
+            Input-Shape: [n_batches, n_heads, n_tokens, head_dim]
+            Output-Shape: [n_batches, n_tokens, head_dim * n_heads (=> hidden_size)]
+            """
             n_batches, _, n_tokens, _ = query_layer.size()
             return query_layer.reshape(n_batches, n_tokens, -1)
         
@@ -473,12 +477,15 @@ class BertKNNSelfAttention(nn.Module):
         # Current solution: Flatten head dim to hidden
         # Probably not the best way to do it
         def kv_flatten_head_dim(new_kv_memories):
-            n_batches, n_heads, n_tokens, kv, head_dim = new_kv_memories.size()
+            """
+            Input-Shape: [n_batches, n_heads, n_tokens, kv (=> 2), head_dim]
+            Output-Shape: [n_batches, n_tokens, kv (=> 2), n_heads * hidden_dim]
+            """
+            n_batches, _, n_tokens, kv, _ = new_kv_memories.size()
             return new_kv_memories.reshape(n_batches, n_tokens, kv, -1)
         
 
         new_kv_memories = torch.stack((key_layer, value_layer), dim = -2).detach()
-        print(new_kv_memories.size())
         new_kv_memories = kv_flatten_head_dim(new_kv_memories)
         knn_memory.add(new_kv_memories)
         
@@ -493,7 +500,6 @@ class BertKNNSelfAttention(nn.Module):
             flat_memory = memory.reshape(n_batches, self.num_attention_heads, n_tokens * n_memories, -1)
             return flat_memory
         
-        print(mem_k.size(), mem_v.size())
         mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
         key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
         value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
