@@ -469,11 +469,6 @@ class BertKNNSelfAttention(nn.Module):
         query_layer_for_search = query_flatten_head_dim(query_layer)
         mem_kv, mem_mask = knn_memory.search(query_layer_for_search, 32)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
-        # print(mem_mask.size())
-        # print(attention_mask)
-        # print(attention_mask.size())
-        # print("-")
-        attention_mask = None
 
         
         # 2. Add current kvs to NN-Index
