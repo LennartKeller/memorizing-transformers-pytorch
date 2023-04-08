@@ -514,7 +514,6 @@ class BertKNNSelfAttention(nn.Module):
 
         # 3.1. Perform hybrid-attention between memories and current states
         # => As implemented in this repo
-        # TODO Think about masking kvs for single tokens!
         def kv_restore_head_dim(tensor):
             """
             Input-Shape: [n_batches, n_tokens, n_retrieved_embs, n_heads * hidden_dim (=>hidden_size)]
@@ -524,9 +523,14 @@ class BertKNNSelfAttention(nn.Module):
             n_batches, n_tokens, n_retrieved_embs, _ = tensor.size()
             return tensor.reshape(n_batches, n_heads, n_tokens, n_retrieved_embs, -1)
         mem_k, mem_v = map(kv_restore_head_dim, (mem_k, mem_v))
-    
+        
         mem_attention_scores = torch.einsum('b h i d, b h i j d -> b h i j', query_layer, mem_k)
         mem_attention_scores = mem_attention_scores / math.sqrt(self.attention_head_size)
+        
+        # Expand mem_mask to n_heads and conver into (-min_float, 0.0) format
+        mem_mask_expanded = mem_mask.unsqueeze(1).repeat(1, self.num_attention_heads, 1, 1)
+        mem_mask_expanded = mem_attention_scores.masked_fill(~mem_mask_expanded, torch.finfo(mem_attention_scores.dtype).min)
+        mem_attention_scores = mem_attention_scores + mem_mask_expanded
 
         use_cache = past_key_value is not None
         if self.is_decoder:
