@@ -481,10 +481,22 @@ class BertKNNSelfAttention(nn.Module):
             flat_memory = memory.reshape(*preceding, n_tokens * n_memories, head_dim)
             return flat_memory
         
-        mem_k, mem_v = map(reshape_into_flat_sequence, (mem_k, mem_v))
+        mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
 
-        key_layer = torch.cat((mem_k, key_layer), dim=-2)
-        value_layer = torch.cat((mem_v, value_layer), dim=-2)
+        # Add current keys and values to memory...
+        # Current version of memory only stores single-head kvs
+        # Current solution: Flatten head dim
+        # Probably not the best way to do it
+        def flatten_head_dim(new_kv_memories):
+            n_batches, n_heads, n_tokens, n_memories, kv, head_dim = new_kv_memories.size()
+            return new_kv_memories.reshape(n_batches, -1, kv, head_dim)
+        
+        new_kv_memories = torch.stack((key_layer.unsqueeze(-2), value_layer.unsqueeze(-2)), dim = -2).detach()
+        new_kv_memories = flatten_head_dim(new_kv_memories)
+        knn_memory.add(new_kv_memories)
+
+        key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
+        value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
 
         use_cache = past_key_value is not None
         if self.is_decoder:

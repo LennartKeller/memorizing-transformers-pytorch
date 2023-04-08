@@ -6,29 +6,38 @@ from memorizing_transformers_pytorch import BertForMaskedLM
 
 def make_fill_mask(model, tokenizer, device):
     mask_token_id = tokenizer.mask_token_id
-    def fill_mask(text):
-        inputs = tokenizer(text, return_tensors="pt", truncation=True)
+    def fill_mask(texts):
+        if isinstance(texts, str):
+            texts = (texts, )
         with model.knn_memories_context(batch_size=1) as knn_memories:
-            inputs = inputs.to(device)
-            inputs["knn_memories"] = knn_memories
-            with torch.no_grad():
-                outputs = model(**inputs)
-            
-            logits = outputs["logits"]
-            probs = F.softmax(logits, dim=-1)
-
-            input_ids = inputs["input_ids"]
-            if (input_ids == mask_token_id).long().sum() > 1:
-                raise ValueError("Only a single mask token is allowed")
-            mask_token_probs = probs[..., input_ids == mask_token_id, :].view(-1)
-            topk = mask_token_probs.topk(k=10)
-            top_probs, top_token_ids = topk
             sequences = []
-            for token_id, prob in zip(top_token_ids, top_probs):
-                filled_input_ids = input_ids.clone()
-                filled_input_ids[mask_token_id == filled_input_ids] = token_id
-                text = tokenizer.decode(filled_input_ids.view(-1), skip_special_tokens=True)
-                sequences.append({"pred": tokenizer.decode(token_id), "text": text, "prob": prob})
+            for text in texts:
+                inputs = tokenizer(text, return_tensors="pt", truncation=True)
+                inputs = inputs.to(device)
+                inputs["knn_memories"] = knn_memories
+                with torch.no_grad():
+                    outputs = model(**inputs)
+                
+                logits = outputs["logits"]
+                probs = F.softmax(logits, dim=-1)
+
+                input_ids = inputs["input_ids"]
+                if (input_ids == mask_token_id).long().sum() > 1:
+                    raise ValueError("Only a single mask token is allowed")
+                mask_token_probs = probs[..., input_ids == mask_token_id, :].view(-1)
+                topk = mask_token_probs.topk(k=10)
+                top_probs, top_token_ids = topk
+                
+                for token_id, prob in zip(top_token_ids, top_probs):
+                    filled_input_ids = input_ids.clone()
+                    filled_input_ids[mask_token_id == filled_input_ids] = token_id
+                    filled_text = tokenizer.decode(filled_input_ids.view(-1), skip_special_tokens=True)
+                    sequences.append({
+                        "pred": tokenizer.decode(token_id),
+                        "text": filled_text,
+                        "prob": prob,
+                        "input": text
+                    })
         return sequences
     return fill_mask
 
@@ -54,7 +63,7 @@ if __name__ == "__main__":
         f"Ich reite auf meinem {mask_token}.",
         f"Berlin ist die Hauptstadt von {mask_token}.",
         f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist.",
-        f"Der Hund {mask_token} laut.",
+        (f"Der Hund bellt {mask_token}.", f"Der Hund {mask_token} laut.")
     )
     for sent in sents:
         print(f"Predictions for {repr(sent)}")
