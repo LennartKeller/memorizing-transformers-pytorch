@@ -4,16 +4,17 @@ import platform
 from transformers import BertTokenizerFast, pipeline
 from memorizing_transformers_pytorch import BertForMaskedLM
 
-def make_fill_mask(model, tokenizer, device):
+def make_fill_mask(model, tokenizer):
     mask_token_id = tokenizer.mask_token_id
     def fill_mask(texts):
+        model.eval()
         if isinstance(texts, str):
             texts = (texts, )
         with model.knn_memories_context(batch_size=1) as knn_memories:
             sequences = []
             for text_idx, text in enumerate(texts):
                 inputs = tokenizer(text, return_tensors="pt", truncation=True)
-                inputs = inputs.to(device)
+                inputs = inputs.to(model.device)
                 inputs["knn_memories"] = knn_memories
                 with torch.no_grad():
                     outputs = model(**inputs)
@@ -58,13 +59,13 @@ if __name__ == "__main__":
         outputs = model(**inputs)
     print(outputs["loss"])
 
-    fill_mask = make_fill_mask(model=model, tokenizer=tokenizer, device=device)
+    fill_mask = make_fill_mask(model=model, tokenizer=tokenizer)
     mask_token = tokenizer.mask_token
     sents = (
         f"Ich reite auf meinem {mask_token}.",
         f"Berlin ist die Hauptstadt von {mask_token}.",
         f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist.",
-        (f"Der Hund bellt {mask_token}.", f"Der Hund {mask_token} laut."),
+        (f"Der Hund {mask_token} laut.", f"Der Hund {mask_token} laut."),
         (f"Meine Name {mask_token} Thomas Müller.", f"Ich heiße Thomas {mask_token}."),
         (f"Meine Name {mask_token} Peter Schmidt.", f"Ich heiße Peter {mask_token}."),
         (f"Meine Name {mask_token} Sarah Fisch.", f"Ich heiße Sarah {mask_token}."),
