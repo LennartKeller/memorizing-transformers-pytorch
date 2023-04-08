@@ -452,53 +452,49 @@ class BertKNNSelfAttention(nn.Module):
             value_layer = self.transpose_for_scores(self.value(hidden_states))
 
         query_layer = self.transpose_for_scores(mixed_query_layer)
-       
-        # Code for testing..
-        # kv_shape = list(key_layer.size())
-        # kv_shape[-2] = 4096 # => 128 retrieved memories...
-        # key_memories = torch.randn(*kv_shape, device=key_layer.device)
-        # value_memories = torch.randn(*kv_shape, device=value_layer.device)
-
+        
+        # 1. Search in NN-Index
         # TODOs
         # Make attention masks work..
         # Pass num retrieved memories as argument
         attention_mask = None
-        mem_kv, mem_mask = knn_memory.search(query_layer, 32)
+        def query_flatten_head_dim(query_layer):
+            n_batches, _, n_tokens, _ = query_layer.size()
+            return query_layer.reshape(n_batches, n_tokens, -1)
+        
+        query_layer_for_search = query_flatten_head_dim(query_layer)
+        mem_kv, mem_mask = knn_memory.search(query_layer_for_search, 32)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
 
         
-        def reshape_into_flat_sequence(memory):
-            """
-            Simple approach to perform parameter-less memory attention.
-            Instead of performing cross-attention, we simply,
-            flatten all retrieved keys and values to prepend them
-            to the self-attention kv-s.
-
-            Input-Shape: [n_batches, n_heads, n_tokens, n_retrieved_embs, head_dim]
-            Output-Shape: [n_batches, n_heads, n_tokens * n_retrieved_embs, head_dim]
-            """
-            *preceding, n_tokens, n_memories, head_dim = memory.size()
-            flat_memory = memory.reshape(*preceding, n_tokens * n_memories, head_dim)
-            return flat_memory
-        
-        mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
-
+        # 2. Add current kvs to NN-Index
         # Add current keys and values to memory...
         # Current version of memory only stores single-head kvs
-        # Current solution: Flatten head dim
+        # Current solution: Flatten head dim to hidden
         # Probably not the best way to do it
-        def flatten_head_dim(new_kv_memories):
-            n_batches, n_heads, n_tokens, n_memories, kv, head_dim = new_kv_memories.size()
-            return new_kv_memories.reshape(n_batches, -1, kv, head_dim)
+        def kv_flatten_head_dim(new_kv_memories):
+            n_batches, n_heads, n_tokens, kv, head_dim = new_kv_memories.size()
+            return new_kv_memories.reshape(n_batches, n_tokens, kv, -1)
         
-        new_kv_memories = torch.stack((key_layer.unsqueeze(-2), value_layer.unsqueeze(-2)), dim = -2).detach()
-        new_kv_memories = flatten_head_dim(new_kv_memories)
+
+        new_kv_memories = torch.stack((key_layer, value_layer), dim = -2).detach()
+        print(new_kv_memories.size())
+        new_kv_memories = kv_flatten_head_dim(new_kv_memories)
         knn_memory.add(new_kv_memories)
-        # print("##")
-        # print(mem_k_flat.size())
-        # print("--")
-        # print(mem_v_flat.size())
-        # print("$$")
+        
+
+
+        def reshape_into_flat_sequence(memory):
+            """
+            Input-Shape: [n_batches, n_tokens, n_retrieved_embs, hidden_size]
+            Output-Shape: [n_batches, n_heads, n_tokens * n_retrieved_embs, head_dim]
+            """
+            n_batches, n_tokens, n_memories, _ = memory.size()
+            flat_memory = memory.reshape(n_batches, self.num_attention_heads, n_tokens * n_memories, -1)
+            return flat_memory
+        
+        print(mem_k.size(), mem_v.size())
+        mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
         key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
         value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
 
@@ -1121,7 +1117,7 @@ class BertPreTrainedModel(PreTrainedModel):
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         self.knn_mem_kwargs = dict(
-            dim = config.hidden_size // config.num_attention_heads,
+            dim = config.hidden_size, #// config.num_attention_heads,
             max_memories = self.max_knn_memories,
             multiprocessing = self.knn_memory_multiprocessing
         )
