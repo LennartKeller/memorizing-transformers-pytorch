@@ -6,16 +6,20 @@ from memorizing_transformers_pytorch import BertForMaskedLM
 
 def make_fill_mask(model, tokenizer):
     mask_token_id = tokenizer.mask_token_id
+    
     def fill_mask(texts):
-        model.eval()
+        
+        model.eval()  
         if isinstance(texts, str):
             texts = (texts, )
+        
         with model.knn_memories_context(batch_size=1) as knn_memories:
             sequences = []
             for text_idx, text in enumerate(texts):
                 inputs = tokenizer(text, return_tensors="pt", truncation=True)
                 inputs = inputs.to(model.device)
                 inputs["knn_memories"] = knn_memories
+                
                 with torch.no_grad():
                     outputs = model(**inputs)
                 
@@ -25,10 +29,9 @@ def make_fill_mask(model, tokenizer):
                 input_ids = inputs["input_ids"]
                 if (input_ids == mask_token_id).long().sum() > 1:
                     raise ValueError("Only a single mask token is allowed")
-                mask_token_probs = probs[..., input_ids == mask_token_id, :].view(-1)
-                topk = mask_token_probs.topk(k=10)
-                top_probs, top_token_ids = topk
                 
+                mask_token_probs = probs[..., input_ids == mask_token_id, :].view(-1)
+                top_probs, top_token_ids = mask_token_probs.topk(k=10)
                 for token_id, prob in zip(top_token_ids, top_probs):
                     filled_input_ids = input_ids.clone()
                     filled_input_ids[mask_token_id == filled_input_ids] = token_id
@@ -40,7 +43,9 @@ def make_fill_mask(model, tokenizer):
                         "prob": prob,
                         "input": text
                     })
+        
         return sequences
+    
     return fill_mask
 
 
