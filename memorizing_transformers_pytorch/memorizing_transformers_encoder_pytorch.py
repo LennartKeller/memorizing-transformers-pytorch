@@ -12,7 +12,8 @@ from einops import rearrange, repeat
 from einops_exts import repeat_many
 from einops.layers.torch import Rearrange
 
-from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+# from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+from memorizing_transformers_pytorch.knn_memory_torch import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
 
 # helper functions
 
@@ -262,8 +263,10 @@ class KNNAttention(nn.Module):
         # calculate knn attention over memory, if index is passed in
 
         mem_kv, mem_mask = knn_memory.search(q, self.num_retrieved_memories)
-        mem_k, mem_v = mem_kv.unbind(dim = -2)
+        # mem_kv = mem_kv.to(x.device)
+        # mem_mask = mem_mask.to(x.device)
 
+        mem_k, mem_v = mem_kv.unbind(dim = -2)
         sim_mem = einsum('b h i d, b h i j d -> b h i j', q, mem_k) * scale
         sim_mem = sim_mem.masked_fill(~mem_mask, mask_value)
 

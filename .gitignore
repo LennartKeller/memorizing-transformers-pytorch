@@ -1,3 +1,7 @@
+# Slurm files
+slurm-*.out
+# Wandb dir
+wandb/
 # Dir to test model saving
 _test/
 # Faiss temp dir

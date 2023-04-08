@@ -27,31 +27,31 @@ import os
 import sys
 from dataclasses import dataclass, field
 from itertools import chain
-import time
 from typing import Optional
 
 import datasets
 import evaluate
 from datasets import load_dataset
-import torch
 
 import transformers
 from transformers import (
     CONFIG_MAPPING,
     MODEL_FOR_MASKED_LM_MAPPING,
+    AutoConfig,
+    AutoModelForMaskedLM,
     AutoTokenizer,
-    DataCollatorForWholeWordMask,
     DataCollatorForLanguageModeling,
     HfArgumentParser,
+    Trainer,
+    TrainingArguments,
     is_torch_tpu_available,
     set_seed,
 )
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-
 from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
-from trainer import MemorizingTransformerTrainer, MemorizingTransformerTrainingArguments
+
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
 # check_min_version("4.28.0.dev0")
@@ -126,20 +126,6 @@ class ModelArguments:
             )
         },
     )
-    knn_memory_multiprocessing: bool = field(
-        default=None,
-        metadata={
-            "help": "Whether or not to use multiprocessing to speed up KNN-lookups. Per default this is specified by the model's config,"
-            "but can be overwritten here."
-        }
-    )
-    do_whole_word_masking: bool = field(
-        default=True,
-        metadata={
-            "help": "If true, whole words are masked out instead of single subword-tokens."
-            "Should help a little bit to make the model really leverage its memory."
-        }
-    )
 
     def __post_init__(self):
         if self.config_overrides is not None and (self.config_name is not None or self.model_name_or_path is not None):
@@ -174,16 +160,15 @@ class DataTrainingArguments:
             "help": "The percentage of the train set used as validation set in case there's no validation split"
         },
     )
-    # This argument is now part of training arguments since segmenting texts is moved into trainer logic.
-    # max_seq_length: Optional[int] = field(
-    #     default=None,
-    #     metadata={
-    #         "help": (
-    #             "The maximum total input sequence length after tokenization. Sequences longer "
-    #             "than this will be truncated."
-    #         )
-    #     },
-    # )
+    max_seq_length: Optional[int] = field(
+        default=None,
+        metadata={
+            "help": (
+                "The maximum total input sequence length after tokenization. Sequences longer "
+                "than this will be truncated."
+            )
+        },
+    )
     preprocessing_num_workers: Optional[int] = field(
         default=None,
         metadata={"help": "The number of processes to use for the preprocessing."},
@@ -246,7 +231,7 @@ def main():
     # or by passing the --help flag to this script.
     # We now keep distinct sets of args, for a cleaner separation of concerns.
 
-    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, MemorizingTransformerTrainingArguments))
+    parser = HfArgumentParser((ModelArguments, DataTrainingArguments, TrainingArguments))
     if len(sys.argv) == 2 and sys.argv[1].endswith(".json"):
         # If we pass only one argument to the script and it's the path to a json file,
         # let's parse it to get our arguments.
@@ -321,9 +306,6 @@ def main():
             streaming=data_args.streaming,
         )
         if "validation" not in raw_datasets.keys():
-            logger.warning("WARNING: Using a validation_split_percentage to create your validation data destroys document structure and degrades your models performance if no worse. I give you ten seconds to think about it.")
-            time.sleep(10)
-            
             raw_datasets["validation"] = load_dataset(
                 data_args.dataset_name,
                 data_args.dataset_config_name,
@@ -388,8 +370,7 @@ def main():
         "use_auth_token": True if model_args.use_auth_token else None,
     }
     if model_args.config_name:
-        # config = AutoConfig.from_pretrained(model_args.config_name, **config_kwargs)
-        raise NotImplementedError("Config can only be loaded from disk for now.")
+        config = MemorizingTransformerConfig.from_pretrained(model_args.config_name, **config_kwargs)
     elif model_args.model_name_or_path:
         config = MemorizingTransformerConfig.from_pretrained(model_args.model_name_or_path, **config_kwargs)
     else:
@@ -399,10 +380,6 @@ def main():
             logger.info(f"Overriding config: {model_args.config_overrides}")
             config.update_from_string(model_args.config_overrides)
             logger.info(f"New config: {config}")
-    
-    if model_args.knn_memory_multiprocessing is not None:
-        logger.info(f"Manually overwritting model param 'knn_memory_multiprocessing' to {model_args.knn_memory_multiprocessing}")
-        config.update({"knn_memory_multiprocessing": model_args.knn_memory_multiprocessing})
 
     tokenizer_kwargs = {
         "cache_dir": model_args.cache_dir,
@@ -448,40 +425,22 @@ def main():
         column_names = list(raw_datasets["validation"].features)
     text_column_name = "text" if "text" in column_names else column_names[0]
 
-
-    # Main data processing function that will concatenate all texts from our dataset and generate chunks of
-    # max_seq_length.
-    # def group_texts(examples):
-    #     # Concatenate all texts.
-    #     concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
-    #     total_length = len(concatenated_examples[list(examples.keys())[0]])
-    #     # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
-    #     # customize this part to your needs.
-    #     if total_length >= max_seq_length:
-    #         total_length = (total_length // max_seq_length) * max_seq_length
-    #     # Split by chunks of max_len.
-    #     result = {
-    #         k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
-    #         for k, t in concatenated_examples.items()
-    #     }
-    #     return result
-    
-    # if data_args.max_seq_length is None:
-    #     max_seq_length = tokenizer.model_max_length
-    #     if max_seq_length > 1024:
-    #         logger.warning(
-    #             "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
-    #             " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
-    #             " override this default with `--block_size xxx`."
-    #         )
-    #         max_seq_length = 1024
-    # else:
-    #     if data_args.max_seq_length > tokenizer.model_max_length:
-    #         logger.warning(
-    #             f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
-    #             f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
-    #         )
-    #     max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
+    if data_args.max_seq_length is None:
+        max_seq_length = tokenizer.model_max_length
+        if max_seq_length > 1024:
+            logger.warning(
+                "The chosen tokenizer supports a `model_max_length` that is longer than the default `block_size` value"
+                " of 1024. If you would like to use a longer `block_size` up to `tokenizer.model_max_length` you can"
+                " override this default with `--block_size xxx`."
+            )
+            max_seq_length = 1024
+    else:
+        if data_args.max_seq_length > tokenizer.model_max_length:
+            logger.warning(
+                f"The max_seq_length passed ({data_args.max_seq_length}) is larger than the maximum length for the"
+                f"model ({tokenizer.model_max_length}). Using max_seq_length={tokenizer.model_max_length}."
+            )
+        max_seq_length = min(data_args.max_seq_length, tokenizer.model_max_length)
 
     if data_args.line_by_line:
         # When using line_by_line, we just tokenize each nonempty line.
@@ -495,8 +454,8 @@ def main():
             return tokenizer(
                 examples[text_column_name],
                 padding=padding,
-                truncation=False,
-                #max_length=max_seq_length,
+                truncation=True,
+                max_length=max_seq_length,
                 # We use this option because DataCollatorForLanguageModeling (see below) is more efficient when it
                 # receives the `special_tokens_mask`.
                 return_special_tokens_mask=True,
@@ -518,21 +477,6 @@ def main():
                     batched=True,
                     remove_columns=[text_column_name],
                 )
-        
-        # with training_args.main_process_first(desc="grouping texts together"):
-        #     if not data_args.streaming:
-        #         tokenized_datasets = tokenized_datasets.map(
-        #             group_texts,
-        #             batched=True,
-        #             num_proc=data_args.preprocessing_num_workers,
-        #             load_from_cache_file=not data_args.overwrite_cache,
-        #             desc=f"Grouping texts in chunks of {max_seq_length}",
-        #         )
-        #     else:
-        #         tokenized_datasets = tokenized_datasets.map(
-        #             group_texts,
-        #             batched=True,
-        #         )
     else:
         # Otherwise, we tokenize every text, then concatenate them together before splitting them in smaller parts.
         # We use `return_special_tokens_mask=True` because DataCollatorForLanguageModeling (see below) is more
@@ -557,6 +501,22 @@ def main():
                     remove_columns=column_names,
                 )
 
+        # Main data processing function that will concatenate all texts from our dataset and generate chunks of
+        # max_seq_length.
+        def group_texts(examples):
+            # Concatenate all texts.
+            concatenated_examples = {k: list(chain(*examples[k])) for k in examples.keys()}
+            total_length = len(concatenated_examples[list(examples.keys())[0]])
+            # We drop the small remainder, we could add padding if the model supported it instead of this drop, you can
+            # customize this part to your needs.
+            if total_length >= max_seq_length:
+                total_length = (total_length // max_seq_length) * max_seq_length
+            # Split by chunks of max_len.
+            result = {
+                k: [t[i : i + max_seq_length] for i in range(0, total_length, max_seq_length)]
+                for k, t in concatenated_examples.items()
+            }
+            return result
 
         # Note that with `batched=True`, this map processes 1,000 texts together, so group_texts throws away a
         # remainder for each of those groups of 1,000 texts. You can adjust that batch_size here but a higher value
@@ -565,45 +525,21 @@ def main():
         # To speed up this part, we use multiprocessing. See the documentation of the map method for more information:
         # https://huggingface.co/docs/datasets/package_reference/main_classes.html#datasets.Dataset.map
 
-        # with training_args.main_process_first(desc="grouping texts together"):
-        #     if not data_args.streaming:
-        #         tokenized_datasets = tokenized_datasets.map(
-        #             group_texts,
-        #             batched=True,
-        #             num_proc=data_args.preprocessing_num_workers,
-        #             load_from_cache_file=not data_args.overwrite_cache,
-        #             desc=f"Grouping texts in chunks of {max_seq_length}",
-        #         )
-        #     else:
-        #         tokenized_datasets = tokenized_datasets.map(
-        #             group_texts,
-        #             batched=True,
-        #         )
+        with training_args.main_process_first(desc="grouping texts together"):
+            if not data_args.streaming:
+                tokenized_datasets = tokenized_datasets.map(
+                    group_texts,
+                    batched=True,
+                    num_proc=data_args.preprocessing_num_workers,
+                    load_from_cache_file=not data_args.overwrite_cache,
+                    desc=f"Grouping texts in chunks of {max_seq_length}",
+                )
+            else:
+                tokenized_datasets = tokenized_datasets.map(
+                    group_texts,
+                    batched=True,
+                )
 
-    # Sort examples in train dataset by text_length 
-    # to avoid having extremely unbalanced batches and
-    # be able to slowly allow the model adapt to leverage knowledge from extremely long contexts (?)
-
-    # dataset.sort seems to have no option to pass a key func ?
-    # So, we create a temporary columns
-    def get_text_length(examples):            
-        return {"text_length": [len(input_ids) for input_ids in examples["input_ids"]]}
-    
-    with training_args.main_process_first(desc="dataset sort by text length"):
-        if not data_args.streaming:
-            tokenized_datasets = tokenized_datasets.map(
-                get_text_length,
-                batched=True,
-                num_proc=data_args.preprocessing_num_workers,
-                load_from_cache_file=not data_args.overwrite_cache,
-                desc="Counting texts lengths.",
-            )
-        else:
-            tokenized_datasets = tokenized_datasets.map(
-                get_text_length,
-                batched=True
-            )
-    
     if training_args.do_train:
         if "train" not in tokenized_datasets:
             raise ValueError("--do_train requires a train dataset")
@@ -611,11 +547,6 @@ def main():
         if data_args.max_train_samples is not None:
             max_train_samples = min(len(train_dataset), data_args.max_train_samples)
             train_dataset = train_dataset.select(range(max_train_samples))
-    
-    
-    # Reverse=True for debugging longer texts!
-    train_dataset = train_dataset.sort("text_length", reverse=False)
-    train_dataset = train_dataset.remove_columns(["text_length"])
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
@@ -635,7 +566,6 @@ def main():
         metric = evaluate.load("accuracy")
 
         def compute_metrics(eval_preds):
-            print("Computing metrics")
             preds, labels = eval_preds
             # preds have the same shape as the labels, after the argmax(-1) has been calculated
             # by preprocess_logits_for_metrics
@@ -645,28 +575,18 @@ def main():
             labels = labels[mask]
             preds = preds[mask]
             return metric.compute(predictions=preds, references=labels)
-        
+
     # Data collator
     # This one will take care of randomly masking the tokens.
     pad_to_multiple_of_8 = data_args.line_by_line and training_args.fp16 and not data_args.pad_to_max_length
-    if model_args.do_whole_word_masking:
-        logger.info("Using whole word masking.") 
-        data_collator = DataCollatorForWholeWordMask(
-            tokenizer=tokenizer,
-            mlm_probability=data_args.mlm_probability,
-            pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
-        )
-    else:
-        logger.info("Using traditional single token masking.")
-        data_collator = DataCollatorForLanguageModeling(
+    data_collator = DataCollatorForLanguageModeling(
         tokenizer=tokenizer,
         mlm_probability=data_args.mlm_probability,
         pad_to_multiple_of=8 if pad_to_multiple_of_8 else None,
     )
 
-
     # Initialize our Trainer
-    trainer = MemorizingTransformerTrainer(
+    trainer = Trainer(
         model=model,
         args=training_args,
         train_dataset=train_dataset if training_args.do_train else None,
