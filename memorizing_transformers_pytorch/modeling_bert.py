@@ -494,7 +494,11 @@ class BertKNNSelfAttention(nn.Module):
         new_kv_memories = torch.stack((key_layer.unsqueeze(-2), value_layer.unsqueeze(-2)), dim = -2).detach()
         new_kv_memories = flatten_head_dim(new_kv_memories)
         knn_memory.add(new_kv_memories)
-
+        # print("##")
+        # print(mem_k_flat.size())
+        # print("--")
+        # print(mem_v_flat.size())
+        # print("$$")
         key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
         value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
 

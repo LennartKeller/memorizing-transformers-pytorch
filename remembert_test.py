@@ -11,7 +11,7 @@ def make_fill_mask(model, tokenizer, device):
             texts = (texts, )
         with model.knn_memories_context(batch_size=1) as knn_memories:
             sequences = []
-            for text in texts:
+            for text_idx, text in enumerate(texts):
                 inputs = tokenizer(text, return_tensors="pt", truncation=True)
                 inputs = inputs.to(device)
                 inputs["knn_memories"] = knn_memories
@@ -33,6 +33,7 @@ def make_fill_mask(model, tokenizer, device):
                     filled_input_ids[mask_token_id == filled_input_ids] = token_id
                     filled_text = tokenizer.decode(filled_input_ids.view(-1), skip_special_tokens=True)
                     sequences.append({
+                        "idx": text_idx,
                         "pred": tokenizer.decode(token_id),
                         "text": filled_text,
                         "prob": prob,
@@ -63,8 +64,12 @@ if __name__ == "__main__":
         f"Ich reite auf meinem {mask_token}.",
         f"Berlin ist die Hauptstadt von {mask_token}.",
         f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist.",
-        (f"Der Hund bellt {mask_token}.", f"Der Hund {mask_token} laut.")
+        (f"Der Hund bellt {mask_token}.", f"Der Hund {mask_token} laut."),
+        (f"Meine Name {mask_token} Thomas Müller.", f"Ich heiße Thomas {mask_token}."),
+        (f"Meine Name {mask_token} Peter Schmidt.", f"Ich heiße Peter {mask_token}."),
+        (f"Meine Name {mask_token} Sarah Fisch.", f"Ich heiße Sarah {mask_token}."),
     )
     for sent in sents:
         print(f"Predictions for {repr(sent)}")
         print(*fill_mask(sent), sep="\n")
+        print("\n\n")
