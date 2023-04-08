@@ -489,7 +489,7 @@ class BertKNNSelfAttention(nn.Module):
         knn_memory.add(new_kv_memories)
         
 
-        # NOTE While this approach is simple, and it doesn't seem to negative influence the vanilla performance,
+        # NOTE While this approach is simple, and it doesn't seem to negatively influence the vanilla performance,
         # it grows by (n_tokens + n_token * num_retrieved_memories)**2,
         # making it infeasible for num_retrieved_memories >> 1
 
