@@ -457,7 +457,7 @@ class BertKNNSelfAttention(nn.Module):
         # TODOs
         # Make attention masks work..
         # Pass num retrieved memories as argument
-        attention_mask = None
+        
         def query_flatten_head_dim(query_layer):
             """
             Input-Shape: [n_batches, n_heads, n_tokens, head_dim]
@@ -469,6 +469,11 @@ class BertKNNSelfAttention(nn.Module):
         query_layer_for_search = query_flatten_head_dim(query_layer)
         mem_kv, mem_mask = knn_memory.search(query_layer_for_search, 32)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
+        # print(mem_mask.size())
+        # print(attention_mask)
+        # print(attention_mask.size())
+        # print("-")
+        attention_mask = None
 
         
         # 2. Add current kvs to NN-Index
@@ -484,27 +489,45 @@ class BertKNNSelfAttention(nn.Module):
             n_batches, _, n_tokens, kv, _ = new_kv_memories.size()
             return new_kv_memories.reshape(n_batches, n_tokens, kv, -1)
         
-
         new_kv_memories = torch.stack((key_layer, value_layer), dim = -2).detach()
         new_kv_memories = kv_flatten_head_dim(new_kv_memories)
         knn_memory.add(new_kv_memories)
         
 
+        # NOTE While this approach is simple, and doesn't seem to negative influence the vanilla performance,
+        # it grows by (n_tokens + n_token * num_retrieved_memories)**2,
+        # making it infeasible for num_retrieved_memories >> 1
+
         # 3. Prepend current keys and values with retrieved keys and values
-        def reshape_into_flat_sequence(memory):
-            """
-            Input-Shape: [n_batches, n_tokens, n_retrieved_embs, hidden_size]
-            Output-Shape: [n_batches, n_heads, n_tokens * n_retrieved_embs, head_dim]
-            """
-            n_batches, n_tokens, n_memories, _ = memory.size()
-            flat_memory = memory.reshape(n_batches, self.num_attention_heads, n_tokens * n_memories, -1)
-            return flat_memory
+        # def reshape_into_flat_sequence(memory):
+        #     """
+        #     Input-Shape: [n_batches, n_tokens, n_retrieved_embs, hidden_size]
+        #     Output-Shape: [n_batches, n_heads, n_tokens * n_retrieved_embs, head_dim]
+        #     """
+        #     n_batches, n_tokens, n_memories, _ = memory.size()
+        #     flat_memory = memory.reshape(n_batches, self.num_attention_heads, n_tokens * n_memories, -1)
+        #     return flat_memory
         
-        mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
-        key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
-        value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
-        
-        # 4. Continue with standard self-attention...
+        # mem_k_flat, mem_v_flat = map(reshape_into_flat_sequence, (mem_k, mem_v))
+        # key_layer = torch.cat((mem_k_flat, key_layer), dim=-2)
+        # value_layer = torch.cat((mem_v_flat, value_layer), dim=-2)
+
+        # 3.1. Perform hybrid-attention between memories and current states
+        # => As implemented in this repo
+        # TODO Think about masking kvs for single tokens!
+        def kv_restore_head_dim(tensor):
+            """
+            Input-Shape: [n_batches, n_tokens, n_retrieved_embs, n_heads * hidden_dim (=>hidden_size)]
+            Output-Shape: [n_batches, n_heads, n_tokens, n_retrieved_embs, head_dim]
+            """
+            n_heads = self.num_attention_heads
+            n_batches, n_tokens, n_retrieved_embs, _ = tensor.size()
+            return tensor.reshape(n_batches, n_heads, n_tokens, n_retrieved_embs, -1)
+        mem_k, mem_v = map(kv_restore_head_dim, (mem_k, mem_v))
+    
+        mem_attention_scores = torch.einsum('b h i d, b h i j d -> b h i j', query_layer, mem_k)
+        mem_attention_scores = mem_attention_scores / math.sqrt(self.attention_head_size)
+
         use_cache = past_key_value is not None
         if self.is_decoder:
             # if cross_attention save Tuple(torch.Tensor, torch.Tensor) of all cross attention key/value_states.
@@ -545,6 +568,9 @@ class BertKNNSelfAttention(nn.Module):
         if attention_mask is not None:
             # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
             attention_scores = attention_scores + attention_mask
+        
+        # 3.1.1. Combine mem_attns and local attns
+        attention_scores = torch.cat((mem_attention_scores, attention_scores), dim=-1)
 
         # Normalize the attention scores to probabilities.
         attention_probs = nn.functional.softmax(attention_scores, dim=-1)
@@ -556,8 +582,17 @@ class BertKNNSelfAttention(nn.Module):
         # Mask heads if we want to
         if head_mask is not None:
             attention_probs = attention_probs * head_mask
+        
+        # 3.1.2 Perform value token mixing for both types of attention and add results
+        # TODO make configurable
+        local_attention_probs, mem_attention_probs = attention_probs[..., 32:], attention_probs[..., :32]
+        
+        local_context_layer = torch.einsum("b h i j, b h i d -> b h i d", local_attention_probs, value_layer)
+        mem_context_layer = torch.einsum("b h i j, b h i j d -> b h i d", mem_attention_probs, mem_v)
 
-        context_layer = torch.matmul(attention_probs, value_layer)
+        context_layer = local_context_layer + mem_context_layer
+
+        # context_layer = torch.matmul(attention_probs, value_layer)
 
         context_layer = context_layer.permute(0, 2, 1, 3).contiguous()
         new_context_layer_shape = context_layer.size()[:-2] + (self.all_head_size,)
