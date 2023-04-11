@@ -1209,13 +1209,14 @@ class RememBertPreTrainedModel(PreTrainedModel):
             yield knn_memories
             knn_memories.cleanup()
 
-    def clear_memory(self, x, token_id):
+    def clear_memory(self, x, token_id, knn_memories):
         """ clears the KNN memories based on if the batch row contains the specified token id """
         """ for auto-clearing KNN memories based on start and end of strings """
 
         clear_memory = (x == token_id).any(dim = -1)
-        batch_indices, _ = clear_memory.nonzero(as_tuple = True)
-        batch_indices_to_clear = batch_indices.tolist()
+        print(clear_memory.nonzero(as_tuple = False))
+        batch_indices = clear_memory.nonzero(as_tuple = False)
+        batch_indices_to_clear = batch_indices.view(-1).tolist()
 
         if len(batch_indices_to_clear) == 0:
             return
@@ -1459,6 +1460,20 @@ class RememBertModel(RememBertPreTrainedModel):
             encoder_extended_attention_mask = self.invert_attention_mask(encoder_attention_mask)
         else:
             encoder_extended_attention_mask = None
+        
+        if self.config.clear_memory_on_cls_token:
+            if input_ids is None:
+                warnings.warn(
+                    "Memory is should reset on CLS token, but not input_ids are passed."
+                    " Omitting memory reset"
+                )
+            if self.config.cls_token_id is None:
+                warnings.warn(
+                    "Memory reset on CLS token is enabled but model config has to field 'cls_token_id'"
+                    " Omitting memory reset"
+                )
+            else:
+                self.clear_memory(input_ids, self.config.cls_token_id, knn_memories)
 
         # Prepare head mask if needed
         # 1.0 in head_mask indicate we keep the head

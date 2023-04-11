@@ -16,7 +16,9 @@ def make_fill_mask(model, tokenizer):
         with model.knn_memories_context(batch_size=1) as knn_memories:
             sequences = []
             for text_idx, text in enumerate(texts):
-                inputs = tokenizer(text, return_tensors="pt", truncation=True)
+                # Do not add CLS tokens on subsequent sentences to prevent memory clearing.
+                add_special_tokens = not text_idx
+                inputs = tokenizer(text, add_special_tokens=add_special_tokens,return_tensors="pt", truncation=True)
                 inputs = inputs.to(model.device)
                 inputs["knn_memories"] = knn_memories
                 
@@ -52,14 +54,16 @@ def make_fill_mask(model, tokenizer):
 
 if __name__ == "__main__":
     device = "cuda:0" if torch.cuda.is_available() else "mps" if platform.machine() == "arm64" else "cpu"
+    
+    tokenizer = BertTokenizerFast.from_pretrained("deepset/gbert-large")
     remembert_configs = {
         "memorizing_layers": [6, 12, 23],
         "max_knn_memories": 32_000,
         "num_retrieved_memories": 32,
-        "clear_memory_on_sos_token": True,
-        "knn_memory_multiprocessing": True
+        "clear_memory_on_cls_token": True,
+        "cls_token_id": tokenizer.cls_token_id,
+        "knn_memory_multiprocessing": True,
     }
-    tokenizer = BertTokenizerFast.from_pretrained("deepset/gbert-large")
     model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large", **remembert_configs).to(device)
 
     batch_size = 8
