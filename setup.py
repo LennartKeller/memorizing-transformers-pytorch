@@ -19,6 +19,7 @@ setup(
   ],
   install_requires=[
     'einops>=0.6',
+    'einops-exts',
     'filelock',
     'joblib',
     'faiss-gpu ; platform_machine != "arm64"',
