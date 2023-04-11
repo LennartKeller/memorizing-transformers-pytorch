@@ -1188,7 +1188,7 @@ class RememBertPreTrainedModel(PreTrainedModel):
         self,
         *,
         batch_size
-    ):
+    ): 
         return KNNMemoryList.create_memories(
             batch_size=batch_size,
             num_memory_layers=len(self.config.memorizing_layers),
