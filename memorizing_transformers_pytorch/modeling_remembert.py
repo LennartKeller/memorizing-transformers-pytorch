@@ -1214,7 +1214,6 @@ class RememBertPreTrainedModel(PreTrainedModel):
         """ for auto-clearing KNN memories based on start and end of strings """
 
         clear_memory = (x == token_id).any(dim = -1)
-        print(clear_memory.nonzero(as_tuple = False))
         batch_indices = clear_memory.nonzero(as_tuple = False)
         batch_indices_to_clear = batch_indices.view(-1).tolist()
 
