@@ -391,6 +391,8 @@ class RememBertKNNSelfAttention(nn.Module):
                 f"The hidden size ({config.hidden_size}) is not a multiple of the number of attention "
                 f"heads ({config.num_attention_heads})"
             )
+        
+        self.num_retrieved_memories = config.num_retrieved_memories
 
         self.num_attention_heads = config.num_attention_heads
         self.attention_head_size = int(config.hidden_size / config.num_attention_heads)
@@ -467,7 +469,7 @@ class RememBertKNNSelfAttention(nn.Module):
             return query_layer.reshape(n_batches, n_tokens, -1)
         
         query_layer_for_search = query_flatten_head_dim(query_layer)
-        mem_kv, mem_mask = knn_memory.search(query_layer_for_search, 32)
+        mem_kv, mem_mask = knn_memory.search(query_layer_for_search, self.num_retrieved_memories)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
 
         
@@ -584,7 +586,7 @@ class RememBertKNNSelfAttention(nn.Module):
         
         # 3.1.2 Perform value token mixing for both types of attention and add results
         # TODO make configurable
-        local_attention_probs, mem_attention_probs = attention_probs[..., 32:], attention_probs[..., :32]
+        local_attention_probs, mem_attention_probs = attention_probs[..., self.num_retrieved_memories:], attention_probs[..., :self.num_retrieved_memories]
         
         local_context_layer = torch.einsum("b h i j, b h i d -> b h i d", local_attention_probs, value_layer)
         mem_context_layer = torch.einsum("b h i j, b h i j d -> b h i d", mem_attention_probs, mem_v)
@@ -1153,14 +1155,12 @@ class RememBertPreTrainedModel(PreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids"]
     # TODO: Make this configurable?
     knn_memories_directory = DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
-    max_knn_memories = 32_000
-    knn_memory_multiprocessing = True
 
     def __init__(self, config: PretrainedConfig, *inputs, **kwargs):
         self.knn_mem_kwargs = dict(
             dim = config.hidden_size, #// config.num_attention_heads,
-            max_memories = self.max_knn_memories,
-            multiprocessing = self.knn_memory_multiprocessing
+            max_memories = config.max_knn_memories,
+            multiprocessing = config.knn_memory_multiprocessing
         )
         super().__init__(config, *inputs, **kwargs)
 

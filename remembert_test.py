@@ -52,8 +52,15 @@ def make_fill_mask(model, tokenizer):
 
 if __name__ == "__main__":
     device = "cuda:0" if torch.cuda.is_available() else "mps" if platform.machine() == "arm64" else "cpu"
+    remembert_configs = {
+        "memorizing_layers": [6, 12, 23],
+        "max_knn_memories": 32_000,
+        "num_retrieved_memories": 32,
+        "clear_memory_on_sos_token": True,
+        "knn_memory_multiprocessing": True
+    }
     tokenizer = BertTokenizerFast.from_pretrained("deepset/gbert-large")
-    model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large").to(device)
+    model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large", **remembert_configs).to(device)
 
     batch_size = 8
     inputs = tokenizer(["Das ist ein Test"] * batch_size, return_tensors="pt")
@@ -74,8 +81,13 @@ if __name__ == "__main__":
         (f"Meine Name {mask_token} Thomas Müller.", f"Ich heiße Thomas {mask_token}."),
         (f"Meine Name {mask_token} Peter Schmidt.", f"Ich heiße Peter {mask_token}."),
         (f"Meine Name {mask_token} Sarah Fisch.", f"Ich heiße Sarah {mask_token}."),
+        (f"Meine Name {mask_token} Sarah Hamid.", f"Ich heiße Sarah {mask_token}."),
     )
     for sent in sents:
         print(f"Predictions for {repr(sent)}")
         print(*fill_mask(sent), sep="\n")
         print("\n\n")
+
+    print("Saving model to _test/test-saved-model")
+    model.save_pretrained("_test/test-saved-model")
+    tokenizer.save_pretrained("_test/test-saved-model")

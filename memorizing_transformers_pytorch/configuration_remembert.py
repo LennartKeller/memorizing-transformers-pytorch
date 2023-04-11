@@ -156,6 +156,11 @@ class RememBertConfig(PretrainedConfig):
         position_embedding_type="absolute",
         use_cache=True,
         classifier_dropout=None,
+        memorizing_layers = None,
+        max_knn_memories = 32_000,
+        num_retrieved_memories = 32,
+        clear_memory_on_sos_token = True,
+        knn_memory_multiprocessing = True,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -175,6 +180,11 @@ class RememBertConfig(PretrainedConfig):
         self.position_embedding_type = position_embedding_type
         self.use_cache = use_cache
         self.classifier_dropout = classifier_dropout
+        self.memorizing_layers = memorizing_layers
+        self.max_knn_memories = max_knn_memories
+        self.num_retrieved_memories = num_retrieved_memories
+        self.clear_memory_on_sos_token = clear_memory_on_sos_token
+        self.knn_memory_multiprocessing = knn_memory_multiprocessing
 
 
 class RememBertOnnxConfig(OnnxConfig):
