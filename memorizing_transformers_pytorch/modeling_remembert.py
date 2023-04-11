@@ -60,7 +60,7 @@ from transformers.utils import (
 )
 from transformers.models.bert.configuration_bert import BertConfig
 from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
-
+from memorizing_transformers_pytorch.configuration_remembert import RememBertConfig, RememBertOnnxConfig
 
 logger = logging.get_logger(__name__)
 
@@ -187,7 +187,7 @@ def load_tf_weights_in_bert(model, config, tf_checkpoint_path):
     return model
 
 
-class BertEmbeddings(nn.Module):
+class RememBertEmbeddings(nn.Module):
     """Construct the embeddings from word, position and token_type embeddings."""
 
     def __init__(self, config):
@@ -249,7 +249,7 @@ class BertEmbeddings(nn.Module):
         return embeddings
 
 
-class BertSelfAttention(nn.Module):
+class RememBertSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -356,7 +356,7 @@ class BertSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RememBertModel forward() function)
             attention_scores = attention_scores + attention_mask
 
         # Normalize the attention scores to probabilities.
@@ -383,7 +383,7 @@ class BertSelfAttention(nn.Module):
         return outputs
 
 
-class BertKNNSelfAttention(nn.Module):
+class RememBertKNNSelfAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
         if config.hidden_size % config.num_attention_heads != 0 and not hasattr(config, "embedding_size"):
@@ -522,7 +522,7 @@ class BertKNNSelfAttention(nn.Module):
         mem_attention_scores = torch.einsum('b h i d, b h i j d -> b h i j', query_layer, mem_k)
         mem_attention_scores = mem_attention_scores / math.sqrt(self.attention_head_size)
         
-        # Expand mem_mask to n_heads and conver into (-min_float, 0.0) format
+        # Expand mem_mask to n_heads and convert into (-min_float, 0.0) format
         mem_mask_expanded = mem_mask.unsqueeze(1).repeat(1, self.num_attention_heads, 1, 1)
         mem_mask_expanded = mem_attention_scores.masked_fill(~mem_mask_expanded, torch.finfo(mem_attention_scores.dtype).min)
         mem_attention_scores = mem_attention_scores + mem_mask_expanded
@@ -565,7 +565,7 @@ class BertKNNSelfAttention(nn.Module):
 
         attention_scores = attention_scores / math.sqrt(self.attention_head_size)
         if attention_mask is not None:
-            # Apply the attention mask is (precomputed for all layers in BertModel forward() function)
+            # Apply the attention mask is (precomputed for all layers in RememBertModel forward() function)
             attention_scores = attention_scores + attention_mask
         
         # 3.1.1. Combine mem_attns and local attns
@@ -603,7 +603,7 @@ class BertKNNSelfAttention(nn.Module):
             outputs = outputs + (past_key_value,)
         return outputs
 
-class BertSelfOutput(nn.Module):
+class RememBertSelfOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -617,11 +617,11 @@ class BertSelfOutput(nn.Module):
         return hidden_states
 
 
-class BertAttention(nn.Module):
+class RememBertAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BertSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = BertSelfOutput(config)
+        self.self = RememBertSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = RememBertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -666,11 +666,11 @@ class BertAttention(nn.Module):
         return outputs
 
 
-class BertKNNAttention(nn.Module):
+class RememBertKNNAttention(nn.Module):
     def __init__(self, config, position_embedding_type=None):
         super().__init__()
-        self.self = BertKNNSelfAttention(config, position_embedding_type=position_embedding_type)
-        self.output = BertSelfOutput(config)
+        self.self = RememBertKNNSelfAttention(config, position_embedding_type=position_embedding_type)
+        self.output = RememBertSelfOutput(config)
         self.pruned_heads = set()
 
     def prune_heads(self, heads):
@@ -717,7 +717,7 @@ class BertKNNAttention(nn.Module):
         return outputs
 
 
-class BertIntermediate(nn.Module):
+class RememBertIntermediate(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.intermediate_size)
@@ -732,7 +732,7 @@ class BertIntermediate(nn.Module):
         return hidden_states
 
 
-class BertOutput(nn.Module):
+class RememBertOutput(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.intermediate_size, config.hidden_size)
@@ -746,20 +746,20 @@ class BertOutput(nn.Module):
         return hidden_states
 
 
-class BertLayer(nn.Module):
+class RememBertLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BertAttention(config)
+        self.attention = RememBertAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertAttention(config, position_embedding_type="absolute")
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+            self.crossattention = RememBertAttention(config, position_embedding_type="absolute")
+        self.intermediate = RememBertIntermediate(config)
+        self.output = RememBertOutput(config)
 
     def forward(
         self,
@@ -832,20 +832,20 @@ class BertLayer(nn.Module):
         return layer_output
 
 
-class BertKNNLayer(nn.Module):
+class RememBertKNNLayer(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.chunk_size_feed_forward = config.chunk_size_feed_forward
         self.seq_len_dim = 1
-        self.attention = BertKNNAttention(config)
+        self.attention = RememBertKNNAttention(config)
         self.is_decoder = config.is_decoder
         self.add_cross_attention = config.add_cross_attention
         if self.add_cross_attention:
             if not self.is_decoder:
                 raise ValueError(f"{self} should be used as a decoder model if cross attention is added")
-            self.crossattention = BertAttention(config, position_embedding_type="absolute")
-        self.intermediate = BertIntermediate(config)
-        self.output = BertOutput(config)
+            self.crossattention = RememBertAttention(config, position_embedding_type="absolute")
+        self.intermediate = RememBertIntermediate(config)
+        self.output = RememBertOutput(config)
 
     def forward(
         self,
@@ -920,19 +920,19 @@ class BertKNNLayer(nn.Module):
         return layer_output
 
 
-class BertEncoder(nn.Module):
+class RememBertEncoder(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.config = config
-        # self.layer = nn.ModuleList([BertLayer(config) for _ in range(config.num_hidden_layers)])
+        # self.layer = nn.ModuleList([RememBertLayer(config) for _ in range(config.num_hidden_layers)])
         # For now, just add memory to the second-to-last layer.
         # TODO Make this configurable.
         layer = []
         for layer_idx in range(config.num_hidden_layers):
             if layer_idx == config.num_hidden_layers - 2:
-                layer.append(BertKNNLayer(config))
+                layer.append(RememBertKNNLayer(config))
             else:
-                layer.append(BertLayer(config))
+                layer.append(RememBertLayer(config))
         self.layer = nn.ModuleList(layer)
         self.gradient_checkpointing = False
 
@@ -964,7 +964,7 @@ class BertEncoder(nn.Module):
         next_decoder_cache = () if use_cache else None
         knn_memories_iterator = iter(knn_memories)
         for i, layer_module in enumerate(self.layer):
-            if is_memory_layer := isinstance(layer_module, BertKNNLayer):
+            if is_memory_layer := isinstance(layer_module, RememBertKNNLayer):
                 knn_memory = next(knn_memories_iterator)
 
             if output_hidden_states:
@@ -1056,7 +1056,7 @@ class BertEncoder(nn.Module):
         )
 
 
-class BertPooler(nn.Module):
+class RememBertPooler(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1071,7 +1071,7 @@ class BertPooler(nn.Module):
         return pooled_output
 
 
-class BertPredictionHeadTransform(nn.Module):
+class RememBertPredictionHeadTransform(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.dense = nn.Linear(config.hidden_size, config.hidden_size)
@@ -1088,10 +1088,10 @@ class BertPredictionHeadTransform(nn.Module):
         return hidden_states
 
 
-class BertLMPredictionHead(nn.Module):
+class RememBertLMPredictionHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.transform = BertPredictionHeadTransform(config)
+        self.transform = RememBertPredictionHeadTransform(config)
 
         # The output weights are the same as the input embeddings, but there is
         # an output-only bias for each token.
@@ -1108,17 +1108,17 @@ class BertLMPredictionHead(nn.Module):
         return hidden_states
 
 
-class BertOnlyMLMHead(nn.Module):
+class RememBertOnlyMLMHead(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = BertLMPredictionHead(config)
+        self.predictions = RememBertLMPredictionHead(config)
 
     def forward(self, sequence_output: torch.Tensor) -> torch.Tensor:
         prediction_scores = self.predictions(sequence_output)
         return prediction_scores
 
 
-class BertOnlyNSPHead(nn.Module):
+class RememBertOnlyNSPHead(nn.Module):
     def __init__(self, config):
         super().__init__()
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
@@ -1128,10 +1128,10 @@ class BertOnlyNSPHead(nn.Module):
         return seq_relationship_score
 
 
-class BertPreTrainingHeads(nn.Module):
+class RememBertPreTrainingHeads(nn.Module):
     def __init__(self, config):
         super().__init__()
-        self.predictions = BertLMPredictionHead(config)
+        self.predictions = RememBertLMPredictionHead(config)
         self.seq_relationship = nn.Linear(config.hidden_size, 2)
 
     def forward(self, sequence_output, pooled_output):
@@ -1140,13 +1140,13 @@ class BertPreTrainingHeads(nn.Module):
         return prediction_scores, seq_relationship_score
 
 
-class BertPreTrainedModel(PreTrainedModel):
+class RememBertPreTrainedModel(PreTrainedModel):
     """
     An abstract class to handle weights initialization and a simple interface for downloading and loading pretrained
     models.
     """
 
-    config_class = BertConfig
+    config_class = RememBertConfig
     load_tf_weights = load_tf_weights_in_bert
     base_model_prefix = "bert"
     supports_gradient_checkpointing = True
@@ -1181,7 +1181,7 @@ class BertPreTrainedModel(PreTrainedModel):
             module.weight.data.fill_(1.0)
 
     def _set_gradient_checkpointing(self, module, value=False):
-        if isinstance(module, BertEncoder):
+        if isinstance(module, RememBertEncoder):
             module.gradient_checkpointing = value
 
     def create_knn_memories(
@@ -1224,9 +1224,9 @@ class BertPreTrainedModel(PreTrainedModel):
         knn_memories.clear_memory(batch_indices_to_clear)
 
 @dataclass
-class BertForPreTrainingOutput(ModelOutput):
+class RememBertForPreTrainingOutput(ModelOutput):
     """
-    Output type of [`BertForPreTraining`].
+    Output type of [`RememBertForPreTraining`].
 
     Args:
         loss (*optional*, returned when `labels` is provided, `torch.FloatTensor` of shape `(1,)`):
@@ -1268,7 +1268,7 @@ BERT_START_DOCSTRING = r"""
     and behavior.
 
     Parameters:
-        config ([`BertConfig`]): Model configuration class with all the parameters of the model.
+        config ([`RememBertConfig`]): Model configuration class with all the parameters of the model.
             Initializing with a config file does not load the weights associated with the model, only the
             configuration. Check out the [`~PreTrainedModel.from_pretrained`] method to load the model weights.
 """
@@ -1324,10 +1324,10 @@ BERT_INPUTS_DOCSTRING = r"""
 
 
 @add_start_docstrings(
-    "The bare Bert Model transformer outputting raw hidden-states without any specific head on top.",
+    "The bare RememBert Model transformer outputting raw hidden-states without any specific head on top.",
     BERT_START_DOCSTRING,
 )
-class BertModel(BertPreTrainedModel):
+class RememBertModel(RememBertPreTrainedModel):
     """
 
     The model can behave as an encoder (with only self-attention) as well as a decoder, in which case a layer of
@@ -1344,10 +1344,10 @@ class BertModel(BertPreTrainedModel):
         super().__init__(config)
         self.config = config
 
-        self.embeddings = BertEmbeddings(config)
-        self.encoder = BertEncoder(config)
+        self.embeddings = RememBertEmbeddings(config)
+        self.encoder = RememBertEncoder(config)
 
-        self.pooler = BertPooler(config) if add_pooling_layer else None
+        self.pooler = RememBertPooler(config) if add_pooling_layer else None
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1506,19 +1506,19 @@ class BertModel(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
+    RememBert Model with two heads on top as done during the pretraining: a `masked language modeling` head and a `next
     sentence prediction (classification)` head.
     """,
     BERT_START_DOCSTRING,
 )
-class BertForPreTraining(BertPreTrainedModel):
+class RememBertForPreTraining(RememBertPreTrainedModel):
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
 
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BertModel(config)
-        self.cls = BertPreTrainingHeads(config)
+        self.bert = RememBertModel(config)
+        self.cls = RememBertPreTrainingHeads(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1530,7 +1530,7 @@ class BertForPreTraining(BertPreTrainedModel):
         self.cls.predictions.decoder = new_embeddings
 
     @add_start_docstrings_to_model_forward(BERT_INPUTS_DOCSTRING.format("batch_size, sequence_length"))
-    @replace_return_docstrings(output_type=BertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
+    @replace_return_docstrings(output_type=RememBertForPreTrainingOutput, config_class=_CONFIG_FOR_DOC)
     def forward(
         self,
         input_ids: Optional[torch.Tensor] = None,
@@ -1544,7 +1544,7 @@ class BertForPreTraining(BertPreTrainedModel):
         output_attentions: Optional[bool] = None,
         output_hidden_states: Optional[bool] = None,
         return_dict: Optional[bool] = None,
-    ) -> Union[Tuple[torch.Tensor], BertForPreTrainingOutput]:
+    ) -> Union[Tuple[torch.Tensor], RememBertForPreTrainingOutput]:
         r"""
             labels (`torch.LongTensor` of shape `(batch_size, sequence_length)`, *optional*):
                 Labels for computing the masked language modeling loss. Indices should be in `[-100, 0, ...,
@@ -1564,11 +1564,11 @@ class BertForPreTraining(BertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, BertForPreTraining
+        >>> from transformers import AutoTokenizer, RememBertForPreTraining
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = BertForPreTraining.from_pretrained("bert-base-uncased")
+        >>> model = RememBertForPreTraining.from_pretrained("bert-base-uncased")
 
         >>> inputs = tokenizer("Hello, my dog is cute", return_tensors="pt")
         >>> outputs = model(**inputs)
@@ -1605,7 +1605,7 @@ class BertForPreTraining(BertPreTrainedModel):
             output = (prediction_scores, seq_relationship_score) + outputs[2:]
             return ((total_loss,) + output) if total_loss is not None else output
 
-        return BertForPreTrainingOutput(
+        return RememBertForPreTrainingOutput(
             loss=total_loss,
             prediction_logits=prediction_scores,
             seq_relationship_logits=seq_relationship_score,
@@ -1615,9 +1615,9 @@ class BertForPreTraining(BertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
+    """RememBert Model with a `language modeling` head on top for CLM fine-tuning.""", BERT_START_DOCSTRING
 )
-class BertLMHeadModel(BertPreTrainedModel):
+class RememBertLMHeadModel(RememBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
 
@@ -1625,10 +1625,10 @@ class BertLMHeadModel(BertPreTrainedModel):
         super().__init__(config)
 
         if not config.is_decoder:
-            logger.warning("If you want to use `BertLMHeadModel` as a standalone, add `is_decoder=True.`")
+            logger.warning("If you want to use `RememBertLMHeadModel` as a standalone, add `is_decoder=True.`")
 
-        self.bert = BertModel(config, add_pooling_layer=False)
-        self.cls = BertOnlyMLMHead(config)
+        self.bert = RememBertModel(config, add_pooling_layer=False)
+        self.cls = RememBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1756,8 +1756,8 @@ class BertLMHeadModel(BertPreTrainedModel):
         return reordered_past
 
 
-@add_start_docstrings("""Bert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
-class BertForMaskedLM(BertPreTrainedModel):
+@add_start_docstrings("""RememBert Model with a `language modeling` head on top.""", BERT_START_DOCSTRING)
+class RememBertForMaskedLM(RememBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
     _keys_to_ignore_on_load_missing = [r"position_ids", r"predictions.decoder.bias", r"cls.predictions.decoder.weight"]
 
@@ -1766,12 +1766,12 @@ class BertForMaskedLM(BertPreTrainedModel):
 
         if config.is_decoder:
             logger.warning(
-                "If you want to use `BertForMaskedLM` make sure `config.is_decoder=False` for "
+                "If you want to use `RememBertForMaskedLM` make sure `config.is_decoder=False` for "
                 "bi-directional self-attention."
             )
 
-        self.bert = BertModel(config, add_pooling_layer=False)
-        self.cls = BertOnlyMLMHead(config)
+        self.bert = RememBertModel(config, add_pooling_layer=False)
+        self.cls = RememBertOnlyMLMHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1867,15 +1867,15 @@ class BertForMaskedLM(BertPreTrainedModel):
 
 
 @add_start_docstrings(
-    """Bert Model with a `next sentence prediction (classification)` head on top.""",
+    """RememBert Model with a `next sentence prediction (classification)` head on top.""",
     BERT_START_DOCSTRING,
 )
-class BertForNextSentencePrediction(BertPreTrainedModel):
+class RememBertForNextSentencePrediction(RememBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BertModel(config)
-        self.cls = BertOnlyNSPHead(config)
+        self.bert = RememBertModel(config)
+        self.cls = RememBertOnlyNSPHead(config)
 
         # Initialize weights and apply final processing
         self.post_init()
@@ -1909,11 +1909,11 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
         Example:
 
         ```python
-        >>> from transformers import AutoTokenizer, BertForNextSentencePrediction
+        >>> from transformers import AutoTokenizer, RememBertForNextSentencePrediction
         >>> import torch
 
         >>> tokenizer = AutoTokenizer.from_pretrained("bert-base-uncased")
-        >>> model = BertForNextSentencePrediction.from_pretrained("bert-base-uncased")
+        >>> model = RememBertForNextSentencePrediction.from_pretrained("bert-base-uncased")
 
         >>> prompt = "In Italy, pizza served in formal settings, such as at a restaurant, is presented unsliced."
         >>> next_sentence = "The sky is blue due to the shorter wavelength of blue light."
@@ -1970,18 +1970,18 @@ class BertForNextSentencePrediction(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
+    RememBert Model transformer with a sequence classification/regression head on top (a linear layer on top of the pooled
     output) e.g. for GLUE tasks.
     """,
     BERT_START_DOCSTRING,
 )
-class BertForSequenceClassification(BertPreTrainedModel):
+class RememBertForSequenceClassification(RememBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
         self.config = config
 
-        self.bert = BertModel(config)
+        self.bert = RememBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -2073,16 +2073,16 @@ class BertForSequenceClassification(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
+    RememBert Model with a multiple choice classification head on top (a linear layer on top of the pooled output and a
     softmax) e.g. for RocStories/SWAG tasks.
     """,
     BERT_START_DOCSTRING,
 )
-class BertForMultipleChoice(BertPreTrainedModel):
+class RememBertForMultipleChoice(RememBertPreTrainedModel):
     def __init__(self, config):
         super().__init__(config)
 
-        self.bert = BertModel(config)
+        self.bert = RememBertModel(config)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -2167,19 +2167,19 @@ class BertForMultipleChoice(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
+    RememBert Model with a token classification head on top (a linear layer on top of the hidden-states output) e.g. for
     Named-Entity-Recognition (NER) tasks.
     """,
     BERT_START_DOCSTRING,
 )
-class BertForTokenClassification(BertPreTrainedModel):
+class RememBertForTokenClassification(RememBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = BertModel(config, add_pooling_layer=False)
+        self.bert = RememBertModel(config, add_pooling_layer=False)
         classifier_dropout = (
             config.classifier_dropout if config.classifier_dropout is not None else config.hidden_dropout_prob
         )
@@ -2252,19 +2252,19 @@ class BertForTokenClassification(BertPreTrainedModel):
 
 @add_start_docstrings(
     """
-    Bert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
+    RememBert Model with a span classification head on top for extractive question-answering tasks like SQuAD (a linear
     layers on top of the hidden-states output to compute `span start logits` and `span end logits`).
     """,
     BERT_START_DOCSTRING,
 )
-class BertForQuestionAnswering(BertPreTrainedModel):
+class RememBertForQuestionAnswering(RememBertPreTrainedModel):
     _keys_to_ignore_on_load_unexpected = [r"pooler"]
 
     def __init__(self, config):
         super().__init__(config)
         self.num_labels = config.num_labels
 
-        self.bert = BertModel(config, add_pooling_layer=False)
+        self.bert = RememBertModel(config, add_pooling_layer=False)
         self.qa_outputs = nn.Linear(config.hidden_size, config.num_labels)
 
         # Initialize weights and apply final processing

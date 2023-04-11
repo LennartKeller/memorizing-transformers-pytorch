@@ -2,13 +2,13 @@ import torch
 import torch.nn.functional as F
 import platform
 from transformers import BertTokenizerFast, pipeline
-from memorizing_transformers_pytorch import BertForMaskedLM
+from memorizing_transformers_pytorch import RememBertForMaskedLM
 
 def make_fill_mask(model, tokenizer):
     mask_token_id = tokenizer.mask_token_id
     
     def fill_mask(texts):
-        
+
         model.eval()  
         if isinstance(texts, str):
             texts = (texts, )
@@ -52,8 +52,8 @@ def make_fill_mask(model, tokenizer):
 
 if __name__ == "__main__":
     device = "cuda:0" if torch.cuda.is_available() else "mps" if platform.machine() == "arm64" else "cpu"
-    tokenizer = BertTokenizerFast.from_pretrained("bert-base-german-cased")
-    model = BertForMaskedLM.from_pretrained("bert-base-german-cased").to(device)
+    tokenizer = BertTokenizerFast.from_pretrained("deepset/gbert-large")
+    model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large").to(device)
 
     batch_size = 8
     inputs = tokenizer(["Das ist ein Test"] * batch_size, return_tensors="pt")
