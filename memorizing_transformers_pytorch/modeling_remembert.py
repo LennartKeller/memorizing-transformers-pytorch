@@ -931,7 +931,7 @@ class RememBertEncoder(nn.Module):
         # TODO Make this configurable.
         layer = []
         for layer_idx in range(config.num_hidden_layers):
-            if layer_idx == config.num_hidden_layers - 2:
+            if layer_idx in config.memorizing_layers:
                 layer.append(RememBertKNNLayer(config))
             else:
                 layer.append(RememBertLayer(config))
@@ -964,9 +964,11 @@ class RememBertEncoder(nn.Module):
                 use_cache = False
 
         next_decoder_cache = () if use_cache else None
+        print(knn_memories)
         knn_memories_iterator = iter(knn_memories)
         for i, layer_module in enumerate(self.layer):
             if is_memory_layer := isinstance(layer_module, RememBertKNNLayer):
+                print("ismem", i)
                 knn_memory = next(knn_memories_iterator)
 
             if output_hidden_states:
