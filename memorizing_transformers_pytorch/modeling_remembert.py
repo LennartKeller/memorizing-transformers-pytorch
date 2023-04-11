@@ -60,7 +60,7 @@ from transformers.utils import (
 )
 from transformers.models.bert.configuration_bert import BertConfig
 from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
-from memorizing_transformers_pytorch.configuration_remembert import RememBertConfig, RememBertOnnxConfig
+from memorizing_transformers_pytorch.configuration_remembert import RememBertConfig
 
 logger = logging.get_logger(__name__)
 
@@ -1191,8 +1191,7 @@ class RememBertPreTrainedModel(PreTrainedModel):
     ):
         return KNNMemoryList.create_memories(
             batch_size=batch_size,
-            # TODO If number of mem layers becomes configurable...
-            num_memory_layers=1,
+            num_memory_layers=len(self.config.memorizing_layers),
             memories_directory=self.knn_memories_directory,
         )(**self.knn_mem_kwargs)
 
