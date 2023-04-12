@@ -63,6 +63,7 @@ if __name__ == "__main__":
         "clear_memory_on_cls_token": True,
         "cls_token_id": tokenizer.cls_token_id,
         "knn_memory_multiprocessing": True,
+        "normalize_memories": True
     }
     model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large", **remembert_configs).to(device)
 

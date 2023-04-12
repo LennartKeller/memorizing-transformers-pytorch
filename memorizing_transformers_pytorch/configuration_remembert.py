@@ -162,6 +162,7 @@ class RememBertConfig(PretrainedConfig):
         clear_memory_on_sos_token = True,
         knn_memory_multiprocessing = True,
         cls_token_id = None,
+        normalize_memories = False,
         **kwargs,
     ):
         super().__init__(pad_token_id=pad_token_id, **kwargs)
@@ -187,6 +188,7 @@ class RememBertConfig(PretrainedConfig):
         self.clear_memory_on_cls_token = clear_memory_on_sos_token
         self.knn_memory_multiprocessing = knn_memory_multiprocessing
         self.cls_token_id = cls_token_id
+        self.normalize_memories = normalize_memories
 
 
 class RememBertOnnxConfig(OnnxConfig):
