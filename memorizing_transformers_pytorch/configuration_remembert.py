@@ -203,3 +203,6 @@ class RememBertOnnxConfig(OnnxConfig):
                 ("token_type_ids", dynamic_axis),
             ]
         )
+
+
+RememBertConfig.register_for_auto_class()

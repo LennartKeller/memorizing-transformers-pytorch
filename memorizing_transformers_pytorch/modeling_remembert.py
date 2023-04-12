@@ -2366,4 +2366,5 @@ class RememBertForQuestionAnswering(RememBertPreTrainedModel):
             hidden_states=outputs.hidden_states,
             attentions=outputs.attentions,
         )
-    
+
+RememBertModel.register_for_auto_class("AutoModel")
