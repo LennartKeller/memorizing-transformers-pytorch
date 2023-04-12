@@ -58,9 +58,14 @@ from transformers.utils import (
     logging,
     replace_return_docstrings,
 )
-from transformers.models.bert.configuration_bert import BertConfig
-from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+
 from memorizing_transformers_pytorch.configuration_remembert import RememBertConfig
+use_gpu_index = os.environ.get("FAISS_GPU", False)
+if not use_gpu_index:
+    from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+else:
+    from memorizing_transformers_pytorch.knn_memory_gpu import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+
 
 logger = logging.get_logger(__name__)
 
@@ -469,6 +474,7 @@ class RememBertKNNSelfAttention(nn.Module):
             return query_layer.reshape(n_batches, n_tokens, -1)
         
         query_layer_for_search = query_flatten_head_dim(query_layer)
+        query_layer_for_search = nn.functional.normalize(query_layer_for_search, dim=-1)
         mem_kv, mem_mask = knn_memory.search(query_layer_for_search, self.num_retrieved_memories)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
 
@@ -488,6 +494,7 @@ class RememBertKNNSelfAttention(nn.Module):
         
         new_kv_memories = torch.stack((key_layer, value_layer), dim = -2).detach()
         new_kv_memories = kv_flatten_head_dim(new_kv_memories)
+        new_kv_memories = nn.functional.normalize(new_kv_memories, dim=-1)
         knn_memory.add(new_kv_memories)
         
 
