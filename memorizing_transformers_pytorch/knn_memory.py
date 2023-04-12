@@ -1,4 +1,5 @@
 import os
+import time
 import math
 import torch
 import faiss
@@ -18,7 +19,8 @@ from joblib import Parallel, delayed, cpu_count
 
 FAISS_INDEX_GPU_ID = int(os.getenv('FAISS_INDEX_GPU_ID', 0))
 
-DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY = './.tmp/knn.memories'
+time_stamp = str(time.time().replace(".", ""))
+DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY = f'./.tmp/knn.memories.{time_stamp}'
 
 # helper functions
 
