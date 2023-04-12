@@ -464,6 +464,31 @@ class RememBertKNNSelfAttention(nn.Module):
         # TODOs
         # Make attention masks work..
         # Pass num retrieved memories as argument
+        # def l2_normalize(tensor: torch.Tensor) -> torch.Tensor:
+        #     """
+        #     Apply L2 normalization along the last dimension of a PyTorch Tensor.
+
+        #     Args:
+        #         tensor (torch.Tensor): Input tensor with shape (batch_size, dim1, dim2).
+
+        #     Returns:
+        #         torch.Tensor: L2 normalized tensor with the same shape as the input tensor.
+        #     """
+        #     # Calculate the L2 norm along the last dimension
+        #     l2_norm = torch.norm(tensor, p=2, dim=-1, keepdim=True)
+
+        #     # L2 normalize the tensor along the last dimension
+        #     normalized_tensor = tensor / (l2_norm + 1e-7)  # Adding a small constant to avoid division by zero
+
+        #     return normalized_tensor
+        
+        # query_layer, key_layer, value_layer = map(l2_normalize, (
+        #     query_layer, key_layer, value_layer
+        # ))
+
+        # query_layer, key_layer, value_layer = map(lambda x: nn.functional.normalize(x, dim=-1), (
+        #      query_layer, key_layer, value_layer
+        # ))
         
         def query_flatten_head_dim(query_layer):
             """
@@ -474,7 +499,6 @@ class RememBertKNNSelfAttention(nn.Module):
             return query_layer.reshape(n_batches, n_tokens, -1)
         
         query_layer_for_search = query_flatten_head_dim(query_layer)
-        query_layer_for_search = nn.functional.normalize(query_layer_for_search, dim=-1)
         mem_kv, mem_mask = knn_memory.search(query_layer_for_search, self.num_retrieved_memories)
         mem_k, mem_v = mem_kv.unbind(dim = -2)
 
@@ -494,7 +518,6 @@ class RememBertKNNSelfAttention(nn.Module):
         
         new_kv_memories = torch.stack((key_layer, value_layer), dim = -2).detach()
         new_kv_memories = kv_flatten_head_dim(new_kv_memories)
-        new_kv_memories = nn.functional.normalize(new_kv_memories, dim=-1)
         knn_memory.add(new_kv_memories)
         
 
