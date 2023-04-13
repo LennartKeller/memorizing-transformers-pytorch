@@ -205,7 +205,7 @@ class MemorizingTransformerModel(PreTrainedModel):
             # loss = all_losses[-1] / len(gathered_outputs)
             loss = sum(all_losses) / len(all_losses)
         outputs = tuple(torch.cat(entries, dim=1) for entries in gathered_outputs)
-        if labels is None:
+        if labels is not None:
             outputs = (loss,) + outputs
         return outputs
     
@@ -255,9 +255,9 @@ class MemorizingTransformerForMaskedLM(MemorizingTransformerModel):
             if labels is not None:
                 outputs["loss"] = loss
         else:
-            outputs = (embeddings,)
+            outputs = (logits,)
             if labels is not None:
-                outputs += (loss,)
+                outputs = (loss,) + outputs
         
         return outputs
         

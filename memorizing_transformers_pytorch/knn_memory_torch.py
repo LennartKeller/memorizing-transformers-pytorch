@@ -63,7 +63,7 @@ class Index(nn.Module):
         self._index = self._index.to(device)
     def reset(self):
         self._init_index()
-    def add(self, x):
+    def add(self, x: torch.Tensor):
         x = x.reshape(-1, self.dim).clone().requires_grad_(False)
         if self._index.ndim == 1:
             self._index = x[:self.max_num_entries, ...]
@@ -75,16 +75,13 @@ class Index(nn.Module):
                 offset = 0
             self._index = torch.cat((self._index[offset:, ...], x), dim=0)
     def search(self, query: torch.Tensor, k: int) -> torch.Tensor:   
-        # Shape n_queries, n_mems
         query = query.detach().clone().to(self._index.device)
-        dists = (self._index @ query.T).T
-        def get_top_k(tensor):
-            top_k = tensor[:, -k:]#.cpu().detach().numpy()
-            return top_k
+        dists = (self._index @ query.T).T  # Shape n_queries, n_mems
+        def get_top_k(tensor): return tensor[:, -k:]
         sorted_dist, indices = map(get_top_k, torch.sort(dists, dim=0))
         return sorted_dist, indices
     def __del__(self):
-        # Strangely, this methods seem to reduce burden on memory???
+        # Strangely, this way of deleting seems to reduce burden on memory???
         self._index = self._index.detach().cpu()
         self._init_index()
         del self._index

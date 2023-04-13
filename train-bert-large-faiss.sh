@@ -13,8 +13,8 @@ conda activate mem_bert && python run_mlm.py \
     --validation_split_percentage 1 \
     --max_eval_samples 250 \
     --line_by_line true \
-    --output_dir /pfs/work7/workspace/scratch/ma_lennkell-mem_bert/pretraining/wiki-de/mem-gbert-large \
-    --run_name mem-gbert-large \
+    --output_dir /pfs/work7/workspace/scratch/ma_lennkell-mem_bert/pretraining/wiki-de/mem-gbert-large-faiss \
+    --run_name mem-gbert-large-faiss \
     --max_steps 250000 \
     --warmup_ratio 0.05 \
     --preprocessing_num_workers 16 \

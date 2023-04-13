@@ -12,8 +12,8 @@ from einops import rearrange, repeat
 from einops_exts import repeat_many
 from einops.layers.torch import Rearrange
 
-# from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
-from memorizing_transformers_pytorch.knn_memory_torch import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+from memorizing_transformers_pytorch.knn_memory import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
+# from memorizing_transformers_pytorch.knn_memory_torch import KNNMemoryList, DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
 
 # helper functions
 

@@ -50,7 +50,7 @@ from transformers import (
 from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
-from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
+from memorizing_transformers_pytorch import MemorizingTransformerConfig, RememBertForMaskedLM, RememBertLongDocumentWrapper
 
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -398,7 +398,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = MemorizingTransformerForMaskedLM.from_pretrained(
+        model = RememBertForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
@@ -409,7 +409,8 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = MemorizingTransformerForMaskedLM.from_config(config)
+        
+    model = RememBertLongDocumentWrapper(model)
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.

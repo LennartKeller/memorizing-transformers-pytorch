@@ -50,7 +50,7 @@ from transformers.trainer_utils import get_last_checkpoint
 from transformers.utils import check_min_version, send_example_telemetry
 from transformers.utils.versions import require_version
 
-from memorizing_transformers_pytorch import MemorizingTransformerConfig, MemorizingTransformerForMaskedLM
+from memorizing_transformers_pytorch import MemorizingTransformerConfig, RememBertForMaskedLM, RememBertLongDocumentWrapper
 from trainer import MemorizingTransformerTrainer, MemorizingTransformerTrainingArguments
 
 # Will error if the minimal version of Transformers is not installed. Remove at your own risks.
@@ -421,7 +421,7 @@ def main():
         )
 
     if model_args.model_name_or_path:
-        model = MemorizingTransformerForMaskedLM.from_pretrained(
+        model = RememBertForMaskedLM.from_pretrained(
             model_args.model_name_or_path,
             from_tf=bool(".ckpt" in model_args.model_name_or_path),
             config=config,
@@ -432,7 +432,8 @@ def main():
         )
     else:
         logger.info("Training new model from scratch")
-        model = MemorizingTransformerForMaskedLM.from_config(config)
+        
+    model = RememBertLongDocumentWrapper(model)
 
     # We resize the embeddings only when necessary to avoid index errors. If you are creating a model from scratch
     # on a small vocab and want a smaller embedding size, remove this test.
@@ -613,9 +614,6 @@ def main():
             train_dataset = train_dataset.select(range(max_train_samples))
     
     
-    # Reverse=True for debugging longer texts!
-    train_dataset = train_dataset.sort("text_length", reverse=False)
-    train_dataset = train_dataset.remove_columns(["text_length"])
 
     if training_args.do_eval:
         if "validation" not in tokenized_datasets:
@@ -623,6 +621,7 @@ def main():
         eval_dataset = tokenized_datasets["validation"]
         if data_args.max_eval_samples is not None:
             max_eval_samples = min(len(eval_dataset), data_args.max_eval_samples)
+            eval_dataset = eval_dataset.shuffle()
             eval_dataset = eval_dataset.select(range(max_eval_samples))
 
         def preprocess_logits_for_metrics(logits, labels):
@@ -645,6 +644,14 @@ def main():
             labels = labels[mask]
             preds = preds[mask]
             return metric.compute(predictions=preds, references=labels)
+    
+    # Reverse=True for debugging longer texts!
+    REVERSE = True
+    train_dataset = train_dataset.sort("text_length", reverse=REVERSE)
+    train_dataset = train_dataset.remove_columns(["text_length"])
+
+    eval_dataset = eval_dataset.sort("text_length", reverse=REVERSE)
+    eval_dataset = eval_dataset.remove_columns(["text_length"])
         
     # Data collator
     # This one will take care of randomly masking the tokens.
