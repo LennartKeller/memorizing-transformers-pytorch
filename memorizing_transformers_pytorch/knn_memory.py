@@ -1,4 +1,5 @@
 import os
+import random
 import time
 import math
 import torch
@@ -290,7 +291,7 @@ class KNNMemoryList(list):
         num_memory_layers,
         memories_directory = DEFAULT_KNN_MEMORY_MEMMAP_DIRECTORY
     ):
-        memories_path = Path(memories_directory)
+        memories_path = Path(memories_directory) / str(random.random())
         memories_path.mkdir(exist_ok = True, parents = True)
 
         def inner(*args, **kwargs):
