@@ -1,5 +1,6 @@
 import torch
 from torch import Tensor, nn
+from inspect import signature
 from collections import defaultdict
 from typing import Dict, List, Optional, Tuple, Union
 
@@ -20,7 +21,7 @@ class RememBertLongDocumentWrapper(nn.Module):
             inputs = BatchEncoding(dict(input_ids=input_ids, labels=labels, **kwargs))
         else:
             inputs = BatchEncoding(dict(input_ids=input_ids, **kwargs))
-
+        inputs = self._remove_unused_args(inputs)
         segments = self._split_batch_into_segments(inputs)
         if self.training and self.max_train_segments:
             segments = segments[:self.max_train_segments]
@@ -42,13 +43,23 @@ class RememBertLongDocumentWrapper(nn.Module):
         max_seq_len = self.max_seq_len
         chunked_data = defaultdict(list)
         for key, tensor in inputs.items():
-            splitted_tensor = tensor.split(max_seq_len, dim=1)
+            if tensor.ndim > 1:
+                splitted_tensor = tensor.split(max_seq_len, dim=1)
             chunked_data[key].extend(splitted_tensor)
         segments = [
             BatchEncoding({key: chunks[i].contiguous() for key, chunks in chunked_data.items()})
             for i in range(len(chunked_data["input_ids"]))
         ]
         return segments
+    
+    def _remove_unused_args(self, inputs):
+        module_args = signature(self._module.forward).parameters
+        cleaned_inputs = BatchEncoding({
+            arg: val
+            for arg, val in inputs.items()
+            if arg in module_args
+        })
+        return cleaned_inputs
     
     @staticmethod
     def _gather_results_from_dicts(segment_outputs: List[ModelOutput]) -> Dict[str, torch.Tensor]:
