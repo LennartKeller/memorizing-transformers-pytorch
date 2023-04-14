@@ -57,7 +57,7 @@ if __name__ == "__main__":
     
     tokenizer = BertTokenizerFast.from_pretrained("deepset/gbert-large")
     remembert_configs = {
-        "memorizing_layers": [6, 12, 23],
+        "memorizing_layers": [12, 22],
         "max_knn_memories": 32_000,
         "num_retrieved_memories": 32,
         "clear_memory_on_cls_token": True,
