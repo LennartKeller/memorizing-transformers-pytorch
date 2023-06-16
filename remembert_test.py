@@ -17,7 +17,10 @@ def make_fill_mask(model, tokenizer):
             sequences = []
             for text_idx, text in enumerate(texts):
                 # Do not add CLS tokens on subsequent sentences to prevent memory clearing.
-                add_special_tokens = not text_idx
+                if model.config.clear_memory_on_cls_token:
+                    add_special_tokens = not text_idx
+                else:
+                    add_special_tokens = True 
                 inputs = tokenizer(text, add_special_tokens=add_special_tokens,return_tensors="pt", truncation=True)
                 inputs = inputs.to(model.device)
                 inputs["knn_memories"] = knn_memories
@@ -60,10 +63,10 @@ if __name__ == "__main__":
         "memorizing_layers": [12, 22],
         "max_knn_memories": 32_000,
         "num_retrieved_memories": 32,
-        "clear_memory_on_cls_token": True,
         "cls_token_id": tokenizer.cls_token_id,
         "knn_memory_multiprocessing": True,
-        "normalize_memories": True
+        "normalize_memories": False,
+        "clear_memory_on_cls_token": False
     }
     model = RememBertForMaskedLM.from_pretrained("deepset/gbert-large", **remembert_configs).to(device)
 
@@ -81,8 +84,14 @@ if __name__ == "__main__":
     sents = (
         f"Ich reite auf meinem {mask_token}.",
         f"Berlin ist die Hauptstadt von {mask_token}.",
+        
         f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist.",
+        f"Mozart starb in {mask_token}",
+        (f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist. Geboren wurde er in Salzburg.", f"Er starb in {mask_token}."),
+        (f"Wolfgang Amadeus {mask_token} war ein berühmter Komponist.", f"Johann {mask_token} von Goethe war ein berühmter Schriftsteller."),
+        
         (f"Der Hund {mask_token} laut.", f"Der Hund {mask_token} laut."),
+
         (f"Meine Name {mask_token} Thomas Müller.", f"Ich heiße Thomas {mask_token}."),
         (f"Meine Name {mask_token} Peter Schmidt.", f"Ich heiße Peter {mask_token}."),
         (f"Meine Name {mask_token} Sarah Fisch.", f"Ich heiße Sarah {mask_token}."),
